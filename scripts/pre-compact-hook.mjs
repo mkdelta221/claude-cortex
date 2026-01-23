@@ -23,6 +23,39 @@ const DB_PATH = join(DB_DIR, 'memories.db');
 // Salience threshold for auto-extraction (higher = more selective)
 const AUTO_EXTRACT_THRESHOLD = 0.45;
 
+// ==================== PROJECT DETECTION (Mirrors src/context/project-context.ts) ====================
+
+/** Directories to skip when extracting project name from path */
+const SKIP_DIRECTORIES = [
+  'src', 'lib', 'dist', 'build', 'out',
+  'node_modules', '.git', '.next', '.cache',
+  'test', 'tests', '__tests__', 'spec',
+  'bin', 'scripts', 'config', 'public', 'static',
+];
+
+/**
+ * Extract project name from a file path.
+ * Skips common directory names that don't represent projects.
+ */
+function extractProjectFromPath(path) {
+  if (!path) return null;
+
+  const segments = path.split(/[/\\]/).filter(Boolean);
+  if (segments.length === 0) return null;
+
+  // Start from the end and find first non-skipped segment
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const segment = segments[i];
+    if (!SKIP_DIRECTORIES.includes(segment.toLowerCase())) {
+      // Skip hidden directories (starting with .)
+      if (segment.startsWith('.')) continue;
+      return segment;
+    }
+  }
+
+  return null;
+}
+
 // Maximum memories to auto-create per compaction
 const MAX_AUTO_MEMORIES = 5;
 
@@ -341,7 +374,7 @@ process.stdin.on('end', () => {
   try {
     const hookData = JSON.parse(input || '{}');
     const trigger = hookData.trigger || 'unknown';
-    const project = hookData.cwd ? hookData.cwd.split('/').pop() : null;
+    const project = extractProjectFromPath(hookData.cwd);
 
     // Extract conversation text from hook data
     // Claude Code passes conversation in various formats

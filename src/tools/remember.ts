@@ -9,6 +9,7 @@ import { addMemory, searchMemories, detectRelationships, createMemoryLink, getLa
 import { calculateSalience, analyzeSalienceFactors, explainSalience } from '../memory/salience.js';
 import { MemoryCategory, MemoryType } from '../memory/types.js';
 import { formatErrorForMcp } from '../errors.js';
+import { resolveProject } from '../context/project-context.js';
 
 // Input schema for the remember tool
 export const rememberSchema = z.object({
@@ -50,6 +51,9 @@ export function executeRemember(input: RememberInput): {
   error?: string;
 } {
   try {
+    // Resolve project (auto-detect if not provided)
+    const resolvedProject = resolveProject(input.project);
+
     // Map importance to salience override
     let salienceOverride: number | undefined;
     if (input.importance) {
@@ -65,7 +69,7 @@ export function executeRemember(input: RememberInput): {
     // Check for duplicates
     const existing = searchMemories({
       query: input.title,
-      project: input.project,
+      project: resolvedProject ?? undefined,
       limit: 3,
     });
 
@@ -91,7 +95,7 @@ export function executeRemember(input: RememberInput): {
       content: input.content,
       category: input.category,
       type: input.type,
-      project: input.project,
+      project: resolvedProject ?? undefined,
       tags: input.tags,
       salience: salienceOverride,
     });

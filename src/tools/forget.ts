@@ -12,6 +12,7 @@ import {
   BulkDeleteSafetyError,
   formatErrorForMcp,
 } from '../errors.js';
+import { resolveProject } from '../context/project-context.js';
 
 // Input schema for the forget tool
 export const forgetSchema = z.object({
@@ -45,6 +46,9 @@ export function executeForget(input: ForgetInput): {
 } {
   try {
     const db = getDatabase();
+
+    // Resolve project (auto-detect if not provided)
+    const resolvedProject = resolveProject(input.project);
 
     // Single ID deletion
     if (input.id !== undefined) {
@@ -97,9 +101,9 @@ export function executeForget(input: ForgetInput): {
       params.push(input.category);
     }
 
-    if (input.project) {
+    if (resolvedProject) {
       conditions.push('project = ?');
-      params.push(input.project);
+      params.push(resolvedProject);
     }
 
     if (input.olderThan !== undefined) {

@@ -9,6 +9,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { initDatabase } from './database/init.js';
 import { DEFAULT_CONFIG } from './memory/types.js';
+import {
+  initProjectContext,
+  getActiveProject,
+  setActiveProject,
+  getProjectContextInfo,
+  GLOBAL_PROJECT_SENTINEL,
+} from './context/project-context.js';
 
 // Import tools
 import { rememberSchema, executeRemember, formatRememberResult } from './tools/remember.js';
@@ -37,6 +44,15 @@ export function createServer(dbPath?: string): McpServer {
     config.dbPath = dbPath;
   }
   initDatabase(config.dbPath);
+
+  // Initialize project context (auto-detect from working directory)
+  initProjectContext();
+  const projectInfo = getProjectContextInfo();
+  if (projectInfo.project) {
+    console.error(`[claude-memory] Project: "${projectInfo.project}" (from ${projectInfo.source})`);
+  } else {
+    console.error('[claude-memory] Project: global scope');
+  }
 
   // Create MCP server
   const server = new McpServer({
@@ -69,7 +85,7 @@ The system automatically detects importance, categorizes, and manages storage.`,
       ]).optional().describe('Category (auto-detected if not provided)'),
       type: z.enum(['short_term', 'long_term', 'episodic']).optional()
         .describe('Memory type (auto-determined if not provided)'),
-      project: z.string().optional().describe('Project this belongs to'),
+      project: z.string().optional().describe('Project scope. Auto-detected from working directory if not provided. Use "*" for global.'),
       tags: z.array(z.string()).optional().describe('Tags for categorization'),
       importance: z.enum(['low', 'normal', 'high', 'critical']).optional()
         .describe('Override automatic salience'),
@@ -99,7 +115,7 @@ Modes: search (query-based), recent (by time), important (by salience)`,
       ]).optional().describe('Filter by category'),
       type: z.enum(['short_term', 'long_term', 'episodic']).optional()
         .describe('Filter by type'),
-      project: z.string().optional().describe('Filter by project'),
+      project: z.string().optional().describe('Project scope. Auto-detected if not provided. Use "*" for all projects.'),
       tags: z.array(z.string()).optional().describe('Filter by tags'),
       limit: z.number().min(1).max(50).optional().default(10)
         .describe('Max results'),
@@ -127,7 +143,7 @@ Modes: search (query-based), recent (by time), important (by salience)`,
         'architecture', 'pattern', 'preference', 'error',
         'context', 'learning', 'todo', 'note', 'relationship', 'custom'
       ]).optional().describe('Delete category'),
-      project: z.string().optional().describe('Delete project memories'),
+      project: z.string().optional().describe('Project scope for deletion. Auto-detected if not provided. Use "*" for all projects.'),
       olderThan: z.number().optional().describe('Delete older than N days'),
       belowSalience: z.number().min(0).max(1).optional()
         .describe('Delete below salience'),
@@ -152,7 +168,7 @@ Modes: search (query-based), recent (by time), important (by salience)`,
 Use at session start, after compaction, when switching tasks, or to recall project info.
 Returns: architecture decisions, patterns, pending items, recent activity.`,
     {
-      project: z.string().optional().describe('Project to get context for'),
+      project: z.string().optional().describe('Project scope. Auto-detected if not provided. Use "*" for all projects.'),
       query: z.string().optional().describe('Current task for relevant context'),
       format: z.enum(['summary', 'detailed', 'raw']).optional().default('summary')
         .describe('Output format'),
@@ -173,7 +189,7 @@ Returns: architecture decisions, patterns, pending items, recent activity.`,
     'start_session',
     'Start a new coding session. Returns relevant context.',
     {
-      project: z.string().optional().describe('Project for session'),
+      project: z.string().optional().describe('Project scope. Auto-detected if not provided. Use "*" for global.'),
     },
     async (args) => {
       const result = executeStartSession(args);
@@ -238,7 +254,7 @@ Returns: architecture decisions, patterns, pending items, recent activity.`,
     'memory_stats',
     'Get memory statistics.',
     {
-      project: z.string().optional().describe('Project filter'),
+      project: z.string().optional().describe('Project scope. Auto-detected if not provided. Use "*" for all projects.'),
     },
     async (args) => {
       const result = executeStats(args);
@@ -274,7 +290,7 @@ Returns: architecture decisions, patterns, pending items, recent activity.`,
     'export_memories',
     'Export memories as JSON for backup.',
     {
-      project: z.string().optional().describe('Export project only'),
+      project: z.string().optional().describe('Project scope. Auto-detected if not provided. Use "*" for all projects.'),
     },
     async (args) => {
       const result = executeExport(args);
@@ -354,6 +370,42 @@ Returns: architecture decisions, patterns, pending items, recent activity.`,
         return { content: [{ type: 'text', text: 'Failed to create link. Memories may not exist or link already exists.' }] };
       }
       return { content: [{ type: 'text', text: `✓ Linked memory ${args.sourceId} → ${args.targetId} (${args.relationship})` }] };
+    }
+  );
+
+  // Set Project - Switch active project context
+  server.tool(
+    'set_project',
+    `Switch active project context. Use "${GLOBAL_PROJECT_SENTINEL}" for global/all projects.`,
+    {
+      project: z.string().describe(`Project name, or "${GLOBAL_PROJECT_SENTINEL}" for global scope`),
+    },
+    async (args) => {
+      const oldProject = getActiveProject();
+      setActiveProject(args.project === GLOBAL_PROJECT_SENTINEL ? null : args.project);
+      const newProject = getActiveProject();
+      return {
+        content: [{
+          type: 'text',
+          text: `Project context changed: ${oldProject || 'global'} → ${newProject || 'global'}`
+        }]
+      };
+    }
+  );
+
+  // Get Project - Show current project scope
+  server.tool(
+    'get_project',
+    'Show current project scope and detection info.',
+    {},
+    async () => {
+      const info = getProjectContextInfo();
+      const lines = [
+        `**Current Project:** ${info.project || 'global (all projects)'}`,
+        `**Detection Source:** ${info.source}`,
+        `**Scope:** ${info.isGlobal ? 'Global - queries return all projects' : `Scoped - queries filtered to "${info.project}"`}`,
+      ];
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
   );
 

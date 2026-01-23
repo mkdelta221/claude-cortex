@@ -18,6 +18,7 @@ import {
 } from '../memory/consolidate.js';
 import { getMemoryStats, getProjectMemories } from '../memory/store.js';
 import { Memory, ContextSummary, ConsolidationResult } from '../memory/types.js';
+import { resolveProject } from '../context/project-context.js';
 
 // Input schema for getting context
 export const getContextSchema = z.object({
@@ -40,13 +41,17 @@ export function executeGetContext(input: GetContextInput): {
   error?: string;
 } {
   try {
+    // Resolve project (auto-detect if not provided)
+    const resolvedProject = resolveProject(input.project);
+    const projectFilter = resolvedProject ?? undefined;
+
     // Generate context summary
-    const summary = generateContextSummary(input.project);
+    const summary = generateContextSummary(projectFilter);
 
     // If there's a query, also get specifically relevant memories
     let relevantMemories: Memory[] = [];
     if (input.query) {
-      relevantMemories = getSuggestedContext(input.query, input.project, 5);
+      relevantMemories = getSuggestedContext(input.query, projectFilter, 5);
     }
 
     // Format based on requested format
@@ -158,7 +163,11 @@ export function executeStartSession(input: { project?: string }): {
   error?: string;
 } {
   try {
-    const { sessionId, context } = startSession(input.project);
+    // Resolve project (auto-detect if not provided)
+    const resolvedProject = resolveProject(input.project);
+    const projectFilter = resolvedProject ?? undefined;
+
+    const { sessionId, context } = startSession(projectFilter);
     const formattedContext = formatContextSummary(context);
 
     return {
@@ -235,7 +244,11 @@ export function executeStats(input: { project?: string }): {
   error?: string;
 } {
   try {
-    const stats = getMemoryStats(input.project);
+    // Resolve project (auto-detect if not provided)
+    const resolvedProject = resolveProject(input.project);
+    const projectFilter = resolvedProject ?? undefined;
+
+    const stats = getMemoryStats(projectFilter);
     return { success: true, stats };
   } catch (error) {
     return {
@@ -278,7 +291,11 @@ export function executeExport(input: { project?: string }): {
   error?: string;
 } {
   try {
-    const data = exportMemories(input.project);
+    // Resolve project (auto-detect if not provided)
+    const resolvedProject = resolveProject(input.project);
+    const projectFilter = resolvedProject ?? undefined;
+
+    const data = exportMemories(projectFilter);
     const memories = JSON.parse(data);
     return {
       success: true,

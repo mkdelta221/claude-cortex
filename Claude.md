@@ -31,12 +31,15 @@ cd dashboard && npm run dev
 | File | Purpose |
 |------|---------|
 | `src/server.ts` | MCP server setup, tool definitions |
+| `src/context/project-context.ts` | Project auto-detection and scoping |
 | `src/memory/store.ts` | Core CRUD operations, memory links |
 | `src/memory/consolidate.ts` | STM→LTM promotion, cleanup |
 | `src/memory/decay.ts` | Temporal decay logic |
 | `src/database/init.ts` | SQLite setup, schema, transactions |
 | `src/errors.ts` | Custom error classes with helpful messages |
 | `src/api/visualization-server.ts` | REST API + WebSocket for dashboard |
+| `scripts/session-start-hook.mjs` | Auto-recall context on session start |
+| `scripts/pre-compact-hook.mjs` | Auto-extract memories before compaction |
 | `dashboard/` | 3D brain visualization (Next.js) |
 
 ## Database Location
@@ -79,8 +82,27 @@ cd dashboard && npm run dev
 3. Restart Claude Code (or start new session)
 4. Test with: "Show memory stats" or "Remember X"
 
-## PreCompact Hook - Automatic Memory Extraction
-A hook runs before every context compaction (manual or auto):
+## Project Auto-Scoping
+Memories are automatically scoped to the current project:
+- Project detected from `process.cwd()` at MCP server startup
+- Override with `CLAUDE_MEMORY_PROJECT` environment variable
+- Use `project: "*"` to query all projects (global scope)
+- New tools: `set_project` (switch context), `get_project` (show current)
+- Located at: `src/context/project-context.ts`
+
+## Hooks
+
+### SessionStart Hook - Auto-Recall Context
+Runs when Claude Code starts a new session:
+- **Auto-loads** project context from memory
+- Shows architecture decisions, patterns, preferences
+- Displays up to 15 high-salience memories
+- New projects get a welcome message
+- Located at: `scripts/session-start-hook.mjs`
+- Configured in: `~/.claude/settings.json` → hooks.SessionStart
+
+### PreCompact Hook - Automatic Memory Extraction
+Runs before every context compaction (manual or auto):
 - **Auto-extracts** high-salience content (decisions, fixes, learnings, patterns)
 - Up to 5 memories auto-saved per compaction (threshold: salience ≥ 0.45)
 - Creates session marker for continuity tracking

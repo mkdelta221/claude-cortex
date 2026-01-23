@@ -9,6 +9,7 @@ import { searchMemories, accessMemory, getRecentMemories, getHighPriorityMemorie
 import { formatTimeSinceAccess } from '../memory/decay.js';
 import { Memory, SearchResult } from '../memory/types.js';
 import { MemoryNotFoundError, formatErrorForMcp } from '../errors.js';
+import { resolveProject } from '../context/project-context.js';
 
 // Input schema for the recall tool
 export const recallSchema = z.object({
@@ -41,15 +42,19 @@ export function executeRecall(input: RecallInput): {
   error?: string;
 } {
   try {
+    // Resolve project (auto-detect if not provided)
+    const resolvedProject = resolveProject(input.project);
+    const projectFilter = resolvedProject ?? undefined;
+
     let memories: Memory[] = [];
 
     switch (input.mode) {
       case 'recent':
-        memories = getRecentMemories(input.limit, input.project);
+        memories = getRecentMemories(input.limit, projectFilter);
         break;
 
       case 'important':
-        memories = getHighPriorityMemories(input.limit, input.project);
+        memories = getHighPriorityMemories(input.limit, projectFilter);
         break;
 
       case 'search':
@@ -58,7 +63,7 @@ export function executeRecall(input: RecallInput): {
           query: input.query || '',
           category: input.category,
           type: input.type,
-          project: input.project,
+          project: projectFilter,
           tags: input.tags,
           limit: input.limit,
           includeDecayed: input.includeDecayed,
