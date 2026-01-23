@@ -20,8 +20,26 @@ import { homedir } from 'os';
 const DB_DIR = join(homedir(), '.claude-memory');
 const DB_PATH = join(DB_DIR, 'memories.db');
 
-// Salience threshold for auto-extraction (higher = more selective)
-const AUTO_EXTRACT_THRESHOLD = 0.45;
+// Memory limits (should match src/memory/types.ts DEFAULT_CONFIG)
+const MAX_SHORT_TERM_MEMORIES = 100;
+const MAX_LONG_TERM_MEMORIES = 1000;
+
+// Base salience threshold (will be adjusted dynamically)
+const BASE_THRESHOLD = 0.45;
+
+// Category-specific extraction thresholds (lower = easier to extract)
+const CATEGORY_EXTRACTION_THRESHOLDS = {
+  architecture: 0.35,  // Very valuable - extract more readily
+  error: 0.40,         // Valuable for debugging
+  context: 0.40,       // Important decisions
+  learning: 0.42,      // Useful learnings
+  pattern: 0.45,       // Code patterns
+  preference: 0.50,    // Less critical
+  note: 0.55,          // Most likely to be noise
+  todo: 0.50,          // Moderate
+  relationship: 0.45,
+  custom: 0.45,
+};
 
 // ==================== PROJECT DETECTION (Mirrors src/context/project-context.ts) ====================
 
@@ -58,6 +76,51 @@ function extractProjectFromPath(path) {
 
 // Maximum memories to auto-create per compaction
 const MAX_AUTO_MEMORIES = 5;
+
+// ==================== DYNAMIC THRESHOLD CALCULATION ====================
+
+/**
+ * Get current memory stats from database
+ */
+function getMemoryStats(db) {
+  try {
+    const stats = db.prepare(`
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN type = 'short_term' THEN 1 ELSE 0 END) as shortTerm,
+        SUM(CASE WHEN type = 'long_term' THEN 1 ELSE 0 END) as longTerm
+      FROM memories
+    `).get();
+    return stats || { total: 0, shortTerm: 0, longTerm: 0 };
+  } catch {
+    return { total: 0, shortTerm: 0, longTerm: 0 };
+  }
+}
+
+/**
+ * Calculate dynamic threshold based on memory fullness
+ * When memory is full, be more selective. When sparse, be more permissive.
+ */
+function getDynamicThreshold(memoryCount, maxMemories) {
+  const fullness = memoryCount / maxMemories;
+
+  // More selective when memory is full, more permissive when sparse
+  if (fullness > 0.8) return 0.60;  // Very full - highly selective
+  if (fullness > 0.6) return 0.52;  // Getting full - moderately selective
+  if (fullness > 0.4) return 0.45;  // Normal - standard threshold
+  if (fullness > 0.2) return 0.40;  // Sparse - more permissive
+  return 0.35;                       // Very sparse - accept most valuable items
+}
+
+/**
+ * Get extraction threshold for a specific category
+ * Combines dynamic threshold with category-specific adjustments
+ */
+function getExtractionThreshold(category, dynamicThreshold) {
+  const categoryThreshold = CATEGORY_EXTRACTION_THRESHOLDS[category] || BASE_THRESHOLD;
+  // Use whichever is lower (more permissive for valuable categories when memory is sparse)
+  return Math.min(categoryThreshold, dynamicThreshold);
+}
 
 // ==================== SALIENCE DETECTION (Mirrors src/memory/salience.ts) ====================
 
@@ -159,7 +222,7 @@ function suggestCategory(text) {
   return 'note';
 }
 
-function extractTags(text) {
+function extractTags(text, extractorName = null) {
   const tags = new Set();
 
   // Extract hashtags
@@ -183,7 +246,54 @@ function extractTags(text) {
   // Add auto-extracted tag
   tags.add('auto-extracted');
 
-  return Array.from(tags).slice(0, 10);
+  // Add source extractor tag for tracking
+  if (extractorName) {
+    tags.add(`source:${extractorName}`);
+  }
+
+  return Array.from(tags).slice(0, 12);
+}
+
+/**
+ * Calculate frequency boost based on how often key terms appear
+ * across all extracted segments. Repeated topics are more important.
+ */
+function calculateFrequencyBoost(segment, allSegments) {
+  // Extract key terms (words > 5 chars that aren't common)
+  const commonWords = new Set([
+    'about', 'after', 'before', 'being', 'between', 'could', 'during',
+    'every', 'found', 'through', 'would', 'should', 'which', 'where',
+    'there', 'these', 'their', 'other', 'using', 'because', 'without'
+  ]);
+
+  const words = segment.content.toLowerCase().split(/\s+/);
+  const keyTerms = words.filter(w =>
+    w.length > 5 &&
+    !commonWords.has(w) &&
+    /^[a-z]+$/.test(w)
+  );
+
+  let boost = 0;
+  const seenTerms = new Set();
+
+  for (const term of keyTerms) {
+    if (seenTerms.has(term)) continue;
+    seenTerms.add(term);
+
+    // Count how many other segments mention this term
+    const mentions = allSegments.filter(s =>
+      s !== segment &&
+      s.content.toLowerCase().includes(term)
+    ).length;
+
+    // Boost for repeated topics (cap at 5 mentions)
+    if (mentions > 1) {
+      boost += 0.03 * Math.min(mentions, 5);
+    }
+  }
+
+  // Cap total frequency boost at 0.15
+  return Math.min(0.15, boost);
 }
 
 // ==================== CONTENT EXTRACTION ====================
@@ -280,8 +390,10 @@ function extractMemorableSegments(conversationText) {
 
 /**
  * Deduplicate and score segments
+ * @param {Array} segments - Raw extracted segments
+ * @param {number} dynamicThreshold - Dynamic threshold based on memory fullness
  */
-function processSegments(segments) {
+function processSegments(segments, dynamicThreshold = BASE_THRESHOLD) {
   // Remove near-duplicates (segments with >80% overlap)
   const unique = [];
   for (const seg of segments) {
@@ -290,22 +402,36 @@ function processSegments(segments) {
       return overlap > 0.8;
     });
     if (!isDupe) {
+      const text = seg.title + ' ' + seg.content;
+      const baseSalience = calculateSalience(text);
+      const category = suggestCategory(text);
+
       unique.push({
         ...seg,
-        salience: calculateSalience(seg.title + ' ' + seg.content),
-        category: suggestCategory(seg.title + ' ' + seg.content),
-        tags: extractTags(seg.title + ' ' + seg.content),
+        baseSalience,
+        category,
+        tags: extractTags(text, seg.extractorType),
       });
     }
+  }
+
+  // Calculate frequency boost after we have all unique segments
+  for (const seg of unique) {
+    const frequencyBoost = calculateFrequencyBoost(seg, unique);
+    seg.salience = Math.min(1.0, seg.baseSalience + frequencyBoost);
+    seg.frequencyBoost = frequencyBoost;
   }
 
   // Sort by salience (highest first)
   unique.sort((a, b) => b.salience - a.salience);
 
-  // Filter by threshold and limit
-  return unique
-    .filter(seg => seg.salience >= AUTO_EXTRACT_THRESHOLD)
-    .slice(0, MAX_AUTO_MEMORIES);
+  // Filter by category-specific threshold (combined with dynamic threshold)
+  const filtered = unique.filter(seg => {
+    const threshold = getExtractionThreshold(seg.category, dynamicThreshold);
+    return seg.salience >= threshold;
+  });
+
+  return filtered.slice(0, MAX_AUTO_MEMORIES);
 }
 
 /**
@@ -388,12 +514,21 @@ process.stdin.on('end', () => {
     // Check if database exists
     if (!existsSync(DB_PATH)) {
       console.error('[pre-compact] Memory database not found, skipping auto-extraction');
-      outputReminder(0);
+      outputReminder(0, BASE_THRESHOLD);
       process.exit(0);
     }
 
     // Connect to database
     const db = new Database(DB_PATH);
+
+    // Get current memory stats for dynamic threshold calculation
+    const stats = getMemoryStats(db);
+    const totalMemories = stats.shortTerm + stats.longTerm;
+    const maxMemories = MAX_SHORT_TERM_MEMORIES + MAX_LONG_TERM_MEMORIES;
+    const dynamicThreshold = getDynamicThreshold(totalMemories, maxMemories);
+
+    console.error(`[auto-extract] Memory status: ${totalMemories}/${maxMemories} (${(totalMemories/maxMemories*100).toFixed(0)}% full)`);
+    console.error(`[auto-extract] Dynamic threshold: ${dynamicThreshold.toFixed(2)}`);
 
     let autoExtractedCount = 0;
 
@@ -401,14 +536,15 @@ process.stdin.on('end', () => {
     if (conversationText && conversationText.length > 100) {
       // Extract memorable segments
       const segments = extractMemorableSegments(conversationText);
-      const processedSegments = processSegments(segments);
+      const processedSegments = processSegments(segments, dynamicThreshold);
 
       // Save auto-extracted memories
       for (const memory of processedSegments) {
         try {
           saveMemory(db, memory, project);
           autoExtractedCount++;
-          console.error(`[auto-extract] Saved: ${memory.title} (salience: ${memory.salience.toFixed(2)})`);
+          const boostInfo = memory.frequencyBoost > 0 ? ` +${memory.frequencyBoost.toFixed(2)} boost` : '';
+          console.error(`[auto-extract] Saved: ${memory.title} (salience: ${memory.salience.toFixed(2)}${boostInfo}, category: ${memory.category})`);
         } catch (err) {
           console.error(`[auto-extract] Failed to save "${memory.title}": ${err.message}`);
         }
@@ -418,16 +554,15 @@ process.stdin.on('end', () => {
     // Create session marker
     createSessionMarker(db, trigger, project, autoExtractedCount);
 
-    db.close();
-
     console.error(`[claude-memory] Pre-compact complete: ${autoExtractedCount} memories auto-extracted`);
 
-    outputReminder(autoExtractedCount);
+    outputReminder(autoExtractedCount, dynamicThreshold);
 
+    db.close();
     process.exit(0);
   } catch (error) {
     console.error(`[pre-compact] Error: ${error.message}`);
-    outputReminder(0);
+    outputReminder(0, BASE_THRESHOLD);
     process.exit(0); // Don't block compaction on errors
   }
 });
@@ -479,15 +614,18 @@ function extractConversationText(hookData) {
 /**
  * Output reminder message to stdout
  */
-function outputReminder(autoExtractedCount) {
+function outputReminder(autoExtractedCount, dynamicThreshold) {
   if (autoExtractedCount > 0) {
     console.log(`
 🧠 AUTO-MEMORY: ${autoExtractedCount} important items were automatically saved before compaction.
 After compaction, use 'get_context' to retrieve your memories.
 `);
   } else {
+    const thresholdNote = dynamicThreshold > 0.5
+      ? ' (Memory near capacity - being selective)'
+      : '';
     console.log(`
-🧠 PRE-COMPACT: No auto-extractable content found with high enough salience.
+🧠 PRE-COMPACT: No auto-extractable content found with high enough salience${thresholdNote}.
 If there's something important, use 'remember' to save it explicitly.
 After compaction, use 'get_context' to retrieve your memories.
 `);

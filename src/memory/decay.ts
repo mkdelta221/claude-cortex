@@ -5,7 +5,7 @@
  * Memories fade over time but can be reinforced through access.
  */
 
-import { Memory, MemoryConfig, DEFAULT_CONFIG } from './types.js';
+import { Memory, MemoryConfig, DEFAULT_CONFIG, DELETION_THRESHOLDS } from './types.js';
 
 /**
  * Calculate the current decayed score for a memory
@@ -87,7 +87,26 @@ export function shouldPromoteToLongTerm(
 }
 
 /**
+ * Determine if an episodic memory should be promoted to long-term
+ * Episodic memories (session markers) promote if they're accessed frequently,
+ * indicating an important session that's being referenced
+ */
+export function shouldPromoteEpisodic(memory: Memory): boolean {
+  if (memory.type !== 'episodic') return false;
+
+  // Promote if accessed 5+ times (indicates important session marker)
+  if (memory.accessCount >= 5) return true;
+
+  // Promote if high salience and relatively old
+  const ageHours = (Date.now() - new Date(memory.createdAt).getTime()) / (1000 * 60 * 60);
+  if (ageHours >= 24 && memory.salience >= 0.8) return true;
+
+  return false;
+}
+
+/**
  * Determine if a memory should be deleted due to decay
+ * Uses category-specific thresholds - architecture/errors are harder to delete
  */
 export function shouldDelete(
   memory: Memory,
@@ -100,8 +119,11 @@ export function shouldDelete(
     return decayedScore < 0.1 && memory.accessCount < 2;
   }
 
-  // Short-term memories can be deleted more readily
-  return decayedScore < config.salienceThreshold;
+  // Get category-specific threshold (defaults to config threshold if not found)
+  const categoryThreshold = DELETION_THRESHOLDS[memory.category] ?? config.salienceThreshold;
+
+  // Short-term and episodic memories use category-specific thresholds
+  return decayedScore < categoryThreshold;
 }
 
 /**
@@ -131,7 +153,7 @@ export function calculatePriority(memory: Memory): number {
 
 /**
  * Batch process memories for decay and cleanup
- * Returns IDs of memories to delete
+ * Returns IDs of memories to delete and promote
  */
 export function processDecay(
   memories: Memory[],
@@ -152,6 +174,9 @@ export function processDecay(
     if (shouldDelete(memory, config)) {
       toDelete.push(memory.id);
     } else if (shouldPromoteToLongTerm(memory, config)) {
+      toPromote.push(memory.id);
+    } else if (shouldPromoteEpisodic(memory)) {
+      // Also consider episodic memories for promotion
       toPromote.push(memory.id);
     }
   }

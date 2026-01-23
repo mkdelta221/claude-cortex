@@ -230,15 +230,38 @@ Returns: architecture decisions, patterns, pending items, recent activity.`,
   // Consolidate
   server.tool(
     'consolidate',
-    'Run memory consolidation (like brain sleep). Promotes STM to LTM, decays old memories.',
+    'Run memory consolidation (like brain sleep). Promotes STM to LTM, decays old memories. Use dryRun to preview.',
     {
       force: z.boolean().optional().default(false).describe('Force consolidation'),
+      dryRun: z.boolean().optional().default(false).describe('Preview what would happen without doing it'),
     },
     async (args) => {
       const result = executeConsolidate(args);
       if (!result.success) {
         return { content: [{ type: 'text', text: `Error: ${result.error}` }] };
       }
+
+      // Dry run returns preview
+      if (result.preview) {
+        const p = result.preview;
+        const lines = [
+          '## Consolidation Preview (Dry Run)',
+          '',
+          `Would promote: ${p.toPromote} memories`,
+          `Would delete: ${p.toDelete} memories`,
+        ];
+        if (p.promoteList.length > 0) {
+          lines.push('', '**To promote:**');
+          lines.push(...p.promoteList.map(t => `  - ${t}`));
+        }
+        if (p.deleteList.length > 0) {
+          lines.push('', '**At risk of deletion:**');
+          lines.push(...p.deleteList.map(t => `  - ${t}`));
+        }
+        return { content: [{ type: 'text', text: lines.join('\n') }] };
+      }
+
+      // Actual consolidation result
       const r = result.result!;
       return {
         content: [{

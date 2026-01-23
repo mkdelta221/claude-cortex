@@ -107,3 +107,20 @@ export const DEFAULT_CONFIG: MemoryConfig = {
   maxLongTermMemories: 1000,
   autoConsolidateHours: 4,
 };
+
+/**
+ * Category-specific deletion thresholds
+ * Lower threshold = harder to delete (more valuable)
+ */
+export const DELETION_THRESHOLDS: Record<MemoryCategory, number> = {
+  architecture: 0.15,  // Hardest to delete - high value, rarely changes
+  error: 0.15,         // Valuable for debugging
+  pattern: 0.18,       // Important code patterns
+  preference: 0.20,    // User preferences
+  context: 0.22,       // Project context
+  learning: 0.20,      // Learnings from sessions
+  relationship: 0.20,  // Code relationships
+  note: 0.25,          // General notes - easier to delete
+  todo: 0.25,          // Todos - easier to delete
+  custom: 0.22,        // Custom memories
+};

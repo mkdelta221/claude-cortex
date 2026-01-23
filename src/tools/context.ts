@@ -13,6 +13,7 @@ import {
   endSession,
   getSuggestedContext,
   consolidate,
+  previewConsolidation,
   exportMemories,
   importMemories,
 } from '../memory/consolidate.js';
@@ -215,14 +216,36 @@ export function executeEndSession(input: { sessionId: number; summary?: string }
 export const consolidateSchema = z.object({
   force: z.boolean().optional().default(false)
     .describe('Force consolidation even if not due'),
+  dryRun: z.boolean().optional().default(false)
+    .describe('Preview what would happen without actually doing it'),
 });
 
-export function executeConsolidate(input: { force?: boolean }): {
+export function executeConsolidate(input: { force?: boolean; dryRun?: boolean }): {
   success: boolean;
   result?: ConsolidationResult;
+  preview?: {
+    toPromote: number;
+    toDelete: number;
+    promoteList: string[];
+    deleteList: string[];
+  };
   error?: string;
 } {
   try {
+    if (input.dryRun) {
+      // Preview mode - don't actually do anything
+      const preview = previewConsolidation();
+      return {
+        success: true,
+        preview: {
+          toPromote: preview.toPromote.length,
+          toDelete: preview.toDelete.length,
+          promoteList: preview.toPromote.slice(0, 10).map(m => m.title),
+          deleteList: preview.toDelete.slice(0, 10).map(m => `${m.title} (${m.category})`),
+        },
+      };
+    }
+
     const result = consolidate();
     return { success: true, result };
   } catch (error) {

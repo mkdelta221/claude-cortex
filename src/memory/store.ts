@@ -339,6 +339,97 @@ export function updateDecayScores(): number {
 }
 
 /**
+ * Detect the likely category a query is asking about
+ */
+function detectQueryCategory(query: string): MemoryCategory | null {
+  const lower = query.toLowerCase();
+
+  if (/architect|design|structure|pattern|system|schema|model/.test(lower)) {
+    return 'architecture';
+  }
+  if (/error|bug|fix|issue|crash|exception|fail|problem/.test(lower)) {
+    return 'error';
+  }
+  if (/prefer|always|never|style|convention|like|want/.test(lower)) {
+    return 'preference';
+  }
+  if (/learn|discover|realiz|found\s+out|turns?\s+out/.test(lower)) {
+    return 'learning';
+  }
+  if (/todo|task|pending|need\s+to|should\s+do/.test(lower)) {
+    return 'todo';
+  }
+  if (/relation|depend|connect|link|reference/.test(lower)) {
+    return 'relationship';
+  }
+
+  return null;
+}
+
+/**
+ * Calculate a boost for memories linked to high-salience memories
+ */
+function calculateLinkBoost(memoryId: number, db: ReturnType<typeof getDatabase>): number {
+  try {
+    // Get linked memories and their salience
+    const linked = db.prepare(`
+      SELECT m.salience, ml.strength
+      FROM memory_links ml
+      JOIN memories m ON (m.id = ml.target_id OR m.id = ml.source_id)
+      WHERE (ml.source_id = ? OR ml.target_id = ?)
+        AND m.id != ?
+    `).all(memoryId, memoryId, memoryId) as { salience: number; strength: number }[];
+
+    if (linked.length === 0) return 0;
+
+    // Calculate weighted average of linked memory salience
+    const totalWeight = linked.reduce((sum, l) => sum + l.strength, 0);
+    if (totalWeight === 0) return 0;
+
+    const weightedSalience = linked.reduce(
+      (sum, l) => sum + l.salience * l.strength,
+      0
+    ) / totalWeight;
+
+    // Cap boost at 0.15
+    return Math.min(0.15, weightedSalience * 0.2);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Calculate partial tag match score
+ */
+function calculateTagScore(queryTags: string[], memoryTags: string[]): number {
+  if (queryTags.length === 0 || memoryTags.length === 0) return 0;
+
+  // Count partial matches (substring matching)
+  let matches = 0;
+  for (const qt of queryTags) {
+    const qtLower = qt.toLowerCase();
+    if (memoryTags.some(mt => mt.toLowerCase().includes(qtLower) || qtLower.includes(mt.toLowerCase()))) {
+      matches++;
+    }
+  }
+
+  return (matches / queryTags.length) * 0.1;
+}
+
+/**
+ * Extract potential tags from a query string
+ */
+function extractQueryTags(query: string): string[] {
+  // Extract words that might be tags (tech terms, project-specific terms)
+  const words = query.toLowerCase().split(/\s+/);
+  return words.filter(w =>
+    w.length > 2 &&
+    /^[a-z][a-z0-9-]*$/.test(w) &&
+    !['the', 'and', 'for', 'with', 'how', 'what', 'when', 'where', 'why'].includes(w)
+  );
+}
+
+/**
  * Search memories using full-text search and filters
  */
 export function searchMemories(
@@ -347,6 +438,10 @@ export function searchMemories(
 ): SearchResult[] {
   const db = getDatabase();
   const limit = options.limit || 20;
+
+  // Detect query category for boosting
+  const detectedCategory = options.query ? detectQueryCategory(options.query) : null;
+  const queryTags = options.query ? extractQueryTags(options.query) : [];
 
   let sql: string;
   const params: unknown[] = [];
@@ -406,12 +501,30 @@ export function searchMemories(
     const decayedScore = calculateDecayedScore(memory, config);
     memory.decayedScore = decayedScore;
 
-    // Calculate relevance score combining FTS rank, salience, and recency
-    const ftsScore = row.rank ? Math.abs(row.rank as number) / 100 : 0.5;
+    // Improved FTS score normalization (BM25-style)
+    // FTS5 rank is negative, closer to 0 = better match
+    const rawRank = row.rank as number;
+    const ftsScore = rawRank ? 1 / (1 + Math.abs(rawRank)) : 0.3;
+
+    // Recency boost for recently accessed memories
+    const hoursSinceAccess = (Date.now() - new Date(memory.lastAccessed).getTime()) / (1000 * 60 * 60);
+    const recencyBoost = hoursSinceAccess < 1 ? 0.1 : (hoursSinceAccess < 24 ? 0.05 : 0);
+
+    // Category match bonus
+    const categoryBoost = detectedCategory && memory.category === detectedCategory ? 0.1 : 0;
+
+    // Link boost - memories connected to high-salience memories rank higher
+    const linkBoost = calculateLinkBoost(memory.id, db);
+
+    // Partial tag match bonus
+    const tagBoost = calculateTagScore(queryTags, memory.tags);
+
+    // Combined relevance score
     const relevanceScore = (
-      ftsScore * 0.4 +
-      decayedScore * 0.4 +
-      calculatePriority(memory) * 0.2
+      ftsScore * 0.35 +
+      decayedScore * 0.35 +
+      calculatePriority(memory) * 0.15 +
+      recencyBoost + categoryBoost + linkBoost + tagBoost
     );
 
     return { memory, relevanceScore };

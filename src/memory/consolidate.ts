@@ -29,6 +29,7 @@ import {
 import {
   calculateDecayedScore,
   shouldPromoteToLongTerm,
+  shouldPromoteEpisodic,
   shouldDelete,
   processDecay,
 } from './decay.js';
@@ -427,6 +428,84 @@ export function vacuumDatabase(): { success: boolean; message: string } {
   } catch (error) {
     return { success: false, message: `Vacuum failed: ${error}` };
   }
+}
+
+/**
+ * Preview what consolidation would do without actually doing it
+ * Useful for dry-run mode
+ */
+export function previewConsolidation(
+  config: MemoryConfig = DEFAULT_CONFIG
+): {
+  toPromote: Memory[];
+  toDelete: Memory[];
+  totalShortTerm: number;
+  totalLongTerm: number;
+} {
+  const db = getDatabase();
+
+  // Get all short-term memories
+  const shortTermMemories = getMemoriesByType('short_term', config.maxShortTermMemories * 2);
+
+  // Get episodic memories too
+  const episodicMemories = getMemoriesByType('episodic', 100);
+
+  // Process decay to see what would happen
+  const { toDelete: deleteIds, toPromote: promoteIds } = processDecay(
+    [...shortTermMemories, ...episodicMemories],
+    config
+  );
+
+  // Map IDs back to memories
+  const allMemories = [...shortTermMemories, ...episodicMemories];
+  const toPromote = allMemories.filter(m => promoteIds.includes(m.id));
+  const toDelete = allMemories.filter(m => deleteIds.includes(m.id) && !promoteIds.includes(m.id));
+
+  // Get counts
+  const totalShortTerm = (db.prepare(
+    "SELECT COUNT(*) as count FROM memories WHERE type = 'short_term'"
+  ).get() as { count: number }).count;
+
+  const totalLongTerm = (db.prepare(
+    "SELECT COUNT(*) as count FROM memories WHERE type = 'long_term'"
+  ).get() as { count: number }).count;
+
+  return { toPromote, toDelete, totalShortTerm, totalLongTerm };
+}
+
+/**
+ * Check if consolidation should be triggered based on memory state
+ * Returns true if consolidation is recommended
+ */
+export function shouldTriggerConsolidation(
+  config: MemoryConfig = DEFAULT_CONFIG
+): { shouldRun: boolean; reason: string } {
+  const stats = getMemoryStats();
+  const stmFullness = stats.shortTerm / config.maxShortTermMemories;
+
+  // Trigger early when approaching capacity
+  if (stmFullness > 0.8) {
+    return {
+      shouldRun: true,
+      reason: `Short-term memory at ${Math.round(stmFullness * 100)}% capacity`,
+    };
+  }
+
+  // Check if many memories are below threshold
+  const db = getDatabase();
+  const lowScoreCount = (db.prepare(`
+    SELECT COUNT(*) as count FROM memories
+    WHERE type = 'short_term' AND decayed_score < ?
+  `).get(config.salienceThreshold) as { count: number }).count;
+
+  if (lowScoreCount > 10) {
+    return {
+      shouldRun: true,
+      reason: `${lowScoreCount} memories below salience threshold`,
+    };
+  }
+
+  return { shouldRun: false, reason: 'No consolidation needed' };
 }
 
 /**
