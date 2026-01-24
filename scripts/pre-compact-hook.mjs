@@ -25,20 +25,22 @@ const MAX_SHORT_TERM_MEMORIES = 100;
 const MAX_LONG_TERM_MEMORIES = 1000;
 
 // Base salience threshold (will be adjusted dynamically)
-const BASE_THRESHOLD = 0.45;
+// Lowered from 0.45 to capture more content
+const BASE_THRESHOLD = 0.35;
 
 // Category-specific extraction thresholds (lower = easier to extract)
+// Lowered across the board to be more permissive
 const CATEGORY_EXTRACTION_THRESHOLDS = {
-  architecture: 0.35,  // Very valuable - extract more readily
-  error: 0.40,         // Valuable for debugging
-  context: 0.40,       // Important decisions
-  learning: 0.42,      // Useful learnings
-  pattern: 0.45,       // Code patterns
-  preference: 0.50,    // Less critical
-  note: 0.55,          // Most likely to be noise
-  todo: 0.50,          // Moderate
-  relationship: 0.45,
-  custom: 0.45,
+  architecture: 0.28,  // Very valuable - extract readily
+  error: 0.30,         // Valuable for debugging
+  context: 0.32,       // Important decisions
+  learning: 0.32,      // Useful learnings
+  pattern: 0.35,       // Code patterns
+  preference: 0.38,    // User preferences
+  note: 0.42,          // General notes
+  todo: 0.40,          // Moderate
+  relationship: 0.35,
+  custom: 0.35,
 };
 
 // ==================== PROJECT DETECTION (Mirrors src/context/project-context.ts) ====================
@@ -100,16 +102,17 @@ function getMemoryStats(db) {
 /**
  * Calculate dynamic threshold based on memory fullness
  * When memory is full, be more selective. When sparse, be more permissive.
+ * Lowered thresholds to capture more content.
  */
 function getDynamicThreshold(memoryCount, maxMemories) {
   const fullness = memoryCount / maxMemories;
 
   // More selective when memory is full, more permissive when sparse
-  if (fullness > 0.8) return 0.60;  // Very full - highly selective
-  if (fullness > 0.6) return 0.52;  // Getting full - moderately selective
-  if (fullness > 0.4) return 0.45;  // Normal - standard threshold
-  if (fullness > 0.2) return 0.40;  // Sparse - more permissive
-  return 0.35;                       // Very sparse - accept most valuable items
+  if (fullness > 0.8) return 0.50;  // Very full - highly selective
+  if (fullness > 0.6) return 0.42;  // Getting full - moderately selective
+  if (fullness > 0.4) return 0.35;  // Normal - standard threshold
+  if (fullness > 0.2) return 0.30;  // Sparse - more permissive
+  return 0.25;                       // Very sparse - accept most valuable items
 }
 
 /**
@@ -306,60 +309,77 @@ function extractMemorableSegments(conversationText) {
   const segments = [];
 
   // Pattern matchers for different types of important content
+  // Expanded patterns with lower minimum lengths for better capture
   const extractors = [
     {
       name: 'decision',
       patterns: [
-        /(?:we\s+)?decided\s+(?:to\s+)?(.{20,200})/gi,
-        /(?:going|went)\s+with\s+(.{20,150})/gi,
-        /(?:chose|chosen|selected)\s+(.{20,150})/gi,
-        /the\s+(?:approach|solution|fix)\s+(?:is|was)\s+(.{20,200})/gi,
+        /(?:we\s+)?decided\s+(?:to\s+)?(.{15,200})/gi,
+        /(?:going|went)\s+with\s+(.{15,150})/gi,
+        /(?:chose|chosen|selected)\s+(.{15,150})/gi,
+        /the\s+(?:approach|solution|fix)\s+(?:is|was)\s+(.{15,200})/gi,
+        // New patterns
+        /(?:using|will\s+use)\s+(.{15,150})/gi,
+        /(?:opted\s+for|settled\s+on)\s+(.{15,150})/gi,
       ],
       titlePrefix: 'Decision: ',
     },
     {
       name: 'error-fix',
       patterns: [
-        /(?:fixed|solved|resolved)\s+(?:by\s+)?(.{20,200})/gi,
-        /the\s+(?:fix|solution|workaround)\s+(?:is|was)\s+(.{20,200})/gi,
-        /(?:root\s+cause|issue)\s+(?:is|was)\s+(.{20,200})/gi,
-        /(?:error|bug)\s+(?:was\s+)?caused\s+by\s+(.{20,200})/gi,
+        /(?:fixed|solved|resolved)\s+(?:by\s+)?(.{15,200})/gi,
+        /the\s+(?:fix|solution|workaround)\s+(?:is|was)\s+(.{15,200})/gi,
+        /(?:root\s+cause|issue)\s+(?:is|was)\s+(.{15,200})/gi,
+        /(?:error|bug)\s+(?:was\s+)?caused\s+by\s+(.{15,200})/gi,
+        // New patterns
+        /(?:problem|issue)\s+was\s+(.{15,150})/gi,
+        /(?:the\s+)?bug\s+(?:is|was)\s+(.{15,150})/gi,
+        /(?:debugging|debugged)\s+(.{15,150})/gi,
       ],
       titlePrefix: 'Fix: ',
     },
     {
       name: 'learning',
       patterns: [
-        /(?:learned|discovered|realized|found\s+out)\s+(?:that\s+)?(.{20,200})/gi,
-        /turns\s+out\s+(?:that\s+)?(.{20,200})/gi,
-        /(?:TIL|today\s+I\s+learned)[:\s]+(.{20,200})/gi,
+        /(?:learned|discovered|realized|found\s+out)\s+(?:that\s+)?(.{15,200})/gi,
+        /turns\s+out\s+(?:that\s+)?(.{15,200})/gi,
+        /(?:TIL|today\s+I\s+learned)[:\s]+(.{15,200})/gi,
+        // New patterns
+        /(?:now\s+)?(?:understand|know)\s+(?:that\s+)?(.{15,150})/gi,
+        /(?:figured\s+out|worked\s+out)\s+(.{15,150})/gi,
       ],
       titlePrefix: 'Learned: ',
     },
     {
       name: 'architecture',
       patterns: [
-        /the\s+architecture\s+(?:is|uses|consists\s+of)\s+(.{20,200})/gi,
-        /(?:design|pattern)\s+(?:is|uses)\s+(.{20,200})/gi,
-        /(?:system|api|database)\s+(?:structure|design)\s+(?:is|uses)\s+(.{20,200})/gi,
+        /the\s+architecture\s+(?:is|uses|consists\s+of)\s+(.{15,200})/gi,
+        /(?:design|pattern)\s+(?:is|uses)\s+(.{15,200})/gi,
+        /(?:system|api|database)\s+(?:structure|design)\s+(?:is|uses)\s+(.{15,200})/gi,
+        // New patterns
+        /(?:created|added|implemented|built)\s+(?:a\s+)?(.{15,200})/gi,
+        /(?:refactored|updated|changed)\s+(?:the\s+)?(.{15,150})/gi,
       ],
       titlePrefix: 'Architecture: ',
     },
     {
       name: 'preference',
       patterns: [
-        /(?:always|never)\s+(.{15,150})/gi,
-        /(?:prefer|want)\s+to\s+(.{15,150})/gi,
-        /(?:should|must)\s+(?:always\s+)?(.{15,150})/gi,
+        /(?:always|never)\s+(.{10,150})/gi,
+        /(?:prefer|want)\s+to\s+(.{10,150})/gi,
+        /(?:should|must)\s+(?:always\s+)?(.{10,150})/gi,
       ],
       titlePrefix: 'Preference: ',
     },
     {
       name: 'important-note',
       patterns: [
-        /important[:\s]+(.{20,200})/gi,
-        /(?:note|remember)[:\s]+(.{20,200})/gi,
-        /(?:key|critical)\s+(?:point|thing)[:\s]+(.{20,200})/gi,
+        /important[:\s]+(.{15,200})/gi,
+        /(?:note|remember)[:\s]+(.{15,200})/gi,
+        /(?:key|critical)\s+(?:point|thing)[:\s]+(.{15,200})/gi,
+        // New patterns
+        /(?:this\s+is\s+)?(?:crucial|essential)[:\s]+(.{15,150})/gi,
+        /(?:don't\s+forget|keep\s+in\s+mind)[:\s]+(.{15,150})/gi,
       ],
       titlePrefix: 'Note: ',
     },
@@ -499,6 +519,11 @@ process.stdin.on('readable', () => {
 process.stdin.on('end', () => {
   try {
     const hookData = JSON.parse(input || '{}');
+
+    // Debug logging - what does Claude Code actually send?
+    console.error('[hook-debug] Received fields:', Object.keys(hookData).join(', '));
+    console.error('[hook-debug] Data preview:', JSON.stringify(hookData, null, 2).slice(0, 1000));
+
     const trigger = hookData.trigger || 'unknown';
     const project = extractProjectFromPath(hookData.cwd);
 
@@ -518,8 +543,9 @@ process.stdin.on('end', () => {
       process.exit(0);
     }
 
-    // Connect to database
-    const db = new Database(DB_PATH);
+    // Connect to database with timeout to handle concurrent access
+    // timeout: 5000ms prevents hook from hanging if DB is locked
+    const db = new Database(DB_PATH, { timeout: 5000 });
 
     // Get current memory stats for dynamic threshold calculation
     const stats = getMemoryStats(db);

@@ -16,7 +16,12 @@ export type MemoryEventType =
   | 'consolidation_complete'
   | 'decay_tick'
   | 'session_started'
-  | 'session_ended';
+  | 'session_ended'
+  // Phase 4: Worker events
+  | 'worker_light_tick'
+  | 'worker_medium_tick'
+  | 'link_discovered'
+  | 'predictive_consolidation';
 
 export interface MemoryEvent {
   type: MemoryEventType;
@@ -71,6 +76,46 @@ export interface DecayTickEvent extends MemoryEvent {
       oldScore: number;
       newScore: number;
     }>;
+  };
+}
+
+// Phase 4: Worker event interfaces
+export interface WorkerLightTickEvent extends MemoryEvent {
+  type: 'worker_light_tick';
+  data: {
+    activationsPruned: number;
+    predictiveConsolidation: ConsolidationResult | null;
+    timestamp: string;
+  };
+}
+
+export interface WorkerMediumTickEvent extends MemoryEvent {
+  type: 'worker_medium_tick';
+  data: {
+    linksDiscovered: number;
+    contradictionsFound: number;
+    contradictionsLinked: number;
+    memoriesScanned: number;
+    timestamp: string;
+  };
+}
+
+export interface LinkDiscoveredEvent extends MemoryEvent {
+  type: 'link_discovered';
+  data: {
+    sourceId: number;
+    targetId: number;
+    relationship: string;
+    strength: number;
+  };
+}
+
+export interface PredictiveConsolidationEvent extends MemoryEvent {
+  type: 'predictive_consolidation';
+  data: {
+    trigger: string;
+    urgency: string;
+    result: ConsolidationResult;
   };
 }
 
@@ -134,4 +179,46 @@ export function emitDecayTick(
   updates: Array<{ memoryId: number; oldScore: number; newScore: number }>
 ): void {
   memoryEvents.emit('decay_tick', { updates });
+}
+
+// Phase 4: Worker event emitters
+export function emitWorkerLightTick(data: {
+  activationsPruned: number;
+  predictiveConsolidation: ConsolidationResult | null;
+  timestamp: Date;
+}): void {
+  memoryEvents.emit('worker_light_tick', {
+    ...data,
+    timestamp: data.timestamp.toISOString(),
+  });
+}
+
+export function emitWorkerMediumTick(data: {
+  linksDiscovered: number;
+  contradictionsFound: number;
+  contradictionsLinked: number;
+  memoriesScanned: number;
+  timestamp: Date;
+}): void {
+  memoryEvents.emit('worker_medium_tick', {
+    ...data,
+    timestamp: data.timestamp.toISOString(),
+  });
+}
+
+export function emitLinkDiscovered(data: {
+  sourceId: number;
+  targetId: number;
+  relationship: string;
+  strength: number;
+}): void {
+  memoryEvents.emit('link_discovered', data);
+}
+
+export function emitPredictiveConsolidation(data: {
+  trigger: string;
+  urgency: string;
+  result: ConsolidationResult;
+}): void {
+  memoryEvents.emit('predictive_consolidation', data);
 }

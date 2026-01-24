@@ -3,17 +3,21 @@
 /**
  * Brain Scene
  * Main 3D visualization of the memory brain
+ * Composes all brain visualization components into a cohesive scene
  */
 
 import { Suspense, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Environment, Stars } from '@react-three/drei';
-import { EffectComposer, Bloom } from '@react-three/postprocessing';
+import { OrbitControls, Stars } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import { Memory, MemoryLink } from '@/types/memory';
 import { MemoryNode } from './MemoryNode';
 import { MemoryLinks } from './MemoryLinks';
-import { DataFlowParticles } from './DataFlowParticles';
+import { BrainMesh } from './BrainMesh';
 import { BrainRegions } from './BrainRegions';
+import { NeuralPathways } from './NeuralPathways';
+import { SynapseNetwork } from './SynapseNodes';
+import { ElectronFlow, SpiralFlow } from './ElectronFlow';
 import { calculateMemoryPosition } from '@/lib/position-algorithm';
 
 interface BrainSceneProps {
@@ -24,13 +28,14 @@ interface BrainSceneProps {
 }
 
 function BrainContent({
-  memories,
+  memories = [],
   links = [],
   selectedMemory,
   onSelectMemory,
 }: BrainSceneProps) {
-  // Calculate positions for all memories
+  // Calculate positions for all memories (guard against null/undefined)
   const memoryPositions = useMemo(() => {
+    if (!memories || memories.length === 0) return [];
     return memories.map((memory) => ({
       memory,
       position: calculateMemoryPosition(memory),
@@ -46,27 +51,54 @@ function BrainContent({
     return map;
   }, [memoryPositions]);
 
+  // Count memories by type for region sizing
+  const memoryCounts = useMemo(() => {
+    const counts = { shortTerm: 0, episodic: 0, longTerm: 0 };
+    memories.forEach((m) => {
+      if (m.type === 'short_term') counts.shortTerm++;
+      else if (m.type === 'episodic') counts.episodic++;
+      else if (m.type === 'long_term') counts.longTerm++;
+    });
+    return counts;
+  }, [memories]);
+
   return (
     <>
       {/* Ambient lighting */}
-      <ambientLight intensity={0.2} />
-      <pointLight position={[10, 10, 10]} intensity={0.5} />
-      <pointLight position={[-10, -10, -10]} intensity={0.3} color="#4488ff" />
+      <ambientLight intensity={0.15} />
+      <pointLight position={[10, 10, 10]} intensity={0.4} color="#ffffff" />
+      <pointLight position={[-10, -10, -10]} intensity={0.25} color="#4488ff" />
+      <pointLight position={[0, 5, 0]} intensity={0.2} color="#aa66ff" />
 
-      {/* Brain region indicators */}
-      <BrainRegions />
+      {/* Procedural brain mesh with cortex */}
+      <BrainMesh opacity={0.2} showWireframe={true} pulseIntensity={0.4} />
 
-      {/* Data flow particles */}
-      <DataFlowParticles count={200} speed={0.4} />
+      {/* Volumetric brain regions */}
+      <BrainRegions
+        shortTermCount={memoryCounts.shortTerm}
+        episodicCount={memoryCounts.episodic}
+        longTermCount={memoryCounts.longTerm}
+        showLabels={false}
+      />
+
+      {/* Neural pathway network */}
+      <NeuralPathways />
+
+      {/* Synapse junction nodes */}
+      <SynapseNetwork />
+
+      {/* Electron flow particles */}
+      <ElectronFlow count={120} speed={0.6} size={0.035} />
+
+      {/* Decorative spiral flow */}
+      <SpiralFlow count={40} radius={4.5} speed={0.2} color="#4466ff" />
 
       {/* Memory links (connections between related memories) */}
-      {links.length > 0 && (
-        <MemoryLinks
-          memories={memories}
-          links={links}
-          memoryPositions={positionMap}
-        />
-      )}
+      <MemoryLinks
+        memories={memories}
+        links={links}
+        memoryPositions={positionMap}
+      />
 
       {/* Memory nodes */}
       {memoryPositions.map(({ memory, position }) => (
@@ -87,27 +119,33 @@ function BrainContent({
         minDistance={5}
         maxDistance={25}
         autoRotate={!selectedMemory}
-        autoRotateSpeed={0.3}
+        autoRotateSpeed={0.2}
+        dampingFactor={0.05}
+        enableDamping
       />
 
       {/* Background stars */}
       <Stars
-        radius={50}
-        depth={50}
-        count={1000}
-        factor={2}
-        saturation={0}
+        radius={80}
+        depth={60}
+        count={1500}
+        factor={3}
+        saturation={0.1}
         fade
-        speed={0.5}
+        speed={0.3}
       />
 
       {/* Post-processing effects */}
       <EffectComposer>
         <Bloom
-          luminanceThreshold={0.2}
+          luminanceThreshold={0.15}
           luminanceSmoothing={0.9}
-          intensity={0.8}
-          radius={0.8}
+          intensity={1.0}
+          radius={0.9}
+        />
+        <Vignette
+          darkness={0.4}
+          offset={0.3}
         />
       </EffectComposer>
     </>
@@ -115,7 +153,7 @@ function BrainContent({
 }
 
 export function BrainScene({
-  memories,
+  memories = [],
   links = [],
   selectedMemory,
   onSelectMemory,
@@ -123,7 +161,7 @@ export function BrainScene({
   return (
     <div className="w-full h-full bg-slate-950">
       <Canvas
-        camera={{ position: [0, 0, 12], fov: 60 }}
+        camera={{ position: [0, 2, 12], fov: 55 }}
         gl={{ antialias: true, alpha: true }}
         onClick={() => onSelectMemory(null)}
       >
@@ -159,6 +197,12 @@ export function BrainScene({
             {memories.length} memories • Click to select
           </p>
         </div>
+      </div>
+
+      {/* Neural activity indicator */}
+      <div className="absolute top-4 right-4 flex items-center gap-2 bg-slate-900/80 border border-slate-700 rounded-full px-3 py-1.5 backdrop-blur-sm">
+        <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+        <span className="text-xs text-cyan-400 font-medium">Neural Activity</span>
       </div>
     </div>
   );

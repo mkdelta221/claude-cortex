@@ -63,6 +63,8 @@ export interface ConsolidationResult {
   consolidated: number;     // Memories moved to long-term
   decayed: number;          // Memories that decayed
   deleted: number;          // Memories removed due to low score
+  contradictionsFound?: number;  // Phase 3: Contradictions detected
+  contradictionsLinked?: number; // Phase 3: Contradiction links created
 }
 
 export interface ContextSummary {

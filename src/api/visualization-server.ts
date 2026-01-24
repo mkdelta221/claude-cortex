@@ -21,6 +21,7 @@ import {
   deleteMemory,
   accessMemory,
   updateDecayScores,
+  rowToMemory,
 } from '../memory/store.js';
 import {
   consolidate,
@@ -28,7 +29,11 @@ import {
   formatContextSummary,
 } from '../memory/consolidate.js';
 import { calculateDecayedScore } from '../memory/decay.js';
+import { getActivationStats, getActiveMemories } from '../memory/activation.js';
+import { detectContradictions, getContradictionsFor } from '../memory/contradiction.js';
+import { enrichMemory } from '../memory/store.js';
 import { memoryEvents, MemoryEvent, emitDecayTick } from './events.js';
+import { BrainWorker } from '../worker/brain-worker.js';
 
 const PORT = process.env.PORT || 3001;
 
@@ -207,30 +212,142 @@ export function startVisualizationServer(dbPath?: string): void {
 
       // Add decay distribution
       const db = getDatabase();
-      const allMemories = db.prepare(
+      const rawRows = db.prepare(
         project
           ? 'SELECT * FROM memories WHERE project = ?'
           : 'SELECT * FROM memories'
-      ).all(project ? [project] : []) as Memory[];
+      ).all(project ? [project] : []) as Record<string, unknown>[];
+
+      // Convert raw DB rows to Memory objects (snake_case -> camelCase)
+      const allMemories = rawRows.map(rowToMemory);
 
       const decayDistribution = {
-        healthy: 0,  // > 0.7
-        fading: 0,   // 0.4 - 0.7
-        critical: 0, // < 0.4
+        healthy: 0,  // > 0.35 (realistic given base salience 0.25 + access bonus)
+        fading: 0,   // 0.2 - 0.35
+        critical: 0, // < 0.2 (approaching deletion threshold)
       };
 
       for (const m of allMemories) {
         const score = calculateDecayedScore(m);
-        if (score > 0.7) decayDistribution.healthy++;
-        else if (score > 0.4) decayDistribution.fading++;
+        if (score > 0.35) decayDistribution.healthy++;
+        else if (score > 0.2) decayDistribution.fading++;
         else decayDistribution.critical++;
       }
+
+      // Get spreading activation stats (Phase 2 organic feature)
+      const activationStats = getActivationStats();
 
       res.json({
         ...stats,
         decayDistribution,
+        activation: activationStats,
         timestamp: new Date().toISOString(),
       });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Get currently activated memories (spreading activation)
+  app.get('/api/activation', (_req: Request, res: Response) => {
+    try {
+      const activeMemories = getActiveMemories();
+      const stats = getActivationStats();
+
+      res.json({
+        activeMemories,
+        stats,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // ============================================
+  // ORGANIC BRAIN ENDPOINTS (Phase 3)
+  // ============================================
+
+  // Get detected contradictions
+  app.get('/api/contradictions', (req: Request, res: Response) => {
+    try {
+      const project = typeof req.query.project === 'string' ? req.query.project : undefined;
+      const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+      const minScoreStr = typeof req.query.minScore === 'string' ? req.query.minScore : '0.4';
+      const limitStr = typeof req.query.limit === 'string' ? req.query.limit : '20';
+
+      const minScore = parseFloat(minScoreStr);
+      const limit = parseInt(limitStr);
+
+      const contradictions = detectContradictions({
+        project,
+        category: category as Memory['category'] | undefined,
+        minScore,
+        limit,
+      });
+
+      res.json({
+        contradictions: contradictions.map(c => ({
+          memoryAId: c.memoryA.id,
+          memoryATitle: c.memoryA.title,
+          memoryBId: c.memoryB.id,
+          memoryBTitle: c.memoryB.title,
+          score: c.score,
+          reason: c.reason,
+          sharedTopics: c.sharedTopics,
+        })),
+        count: contradictions.length,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Get contradictions for a specific memory
+  app.get('/api/memories/:id/contradictions', (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid memory ID' });
+      }
+
+      const contradictions = getContradictionsFor(id);
+
+      res.json({
+        memoryId: id,
+        contradictions: contradictions.map(c => ({
+          contradictingMemoryId: c.memoryB.id,
+          contradictingMemoryTitle: c.memoryB.title,
+          score: c.score,
+          reason: c.reason,
+          sharedTopics: c.sharedTopics,
+        })),
+        count: contradictions.length,
+      });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Manually enrich a memory with new context
+  app.post('/api/memories/:id/enrich', (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'Invalid memory ID' });
+      }
+
+      const { context, contextType } = req.body;
+      if (!context || typeof context !== 'string') {
+        return res.status(400).json({ error: 'Context string required in request body' });
+      }
+
+      const validTypes = ['search', 'access', 'related'];
+      const type = validTypes.includes(contextType) ? contextType : 'access';
+
+      const result = enrichMemory(id, context, type);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: (error as Error).message });
     }
@@ -408,6 +525,50 @@ export function startVisualizationServer(dbPath?: string): void {
   });
 
   // ============================================
+  // BRAIN WORKER (Phase 4)
+  // ============================================
+
+  // Create and start the background brain worker
+  const brainWorker = new BrainWorker();
+
+  // Worker status endpoint
+  app.get('/api/worker/status', (_req: Request, res: Response) => {
+    try {
+      res.json(brainWorker.getStatus());
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Manually trigger light tick (for testing)
+  app.post('/api/worker/trigger-light', async (_req: Request, res: Response) => {
+    try {
+      const result = await brainWorker.triggerLightTick();
+      res.json({
+        success: true,
+        ...result,
+        timestamp: result.timestamp.toISOString(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Manually trigger medium tick (for testing)
+  app.post('/api/worker/trigger-medium', async (_req: Request, res: Response) => {
+    try {
+      const result = await brainWorker.triggerMediumTick();
+      res.json({
+        success: true,
+        ...result,
+        timestamp: result.timestamp.toISOString(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // ============================================
   // WEBSOCKET SERVER
   // ============================================
 
@@ -464,19 +625,23 @@ export function startVisualizationServer(dbPath?: string): void {
   let decayTickCount = 0;
   setInterval(() => {
     const db = getDatabase();
-    const memories = db.prepare(
+    const rawRows = db.prepare(
       'SELECT * FROM memories ORDER BY last_accessed DESC LIMIT 200'
-    ).all() as Memory[];
+    ).all() as Record<string, unknown>[];
+
+    // Convert raw DB rows to Memory objects (snake_case -> camelCase)
+    const memories = rawRows.map(rowToMemory);
 
     const updates: Array<{ memoryId: number; oldScore: number; newScore: number }> = [];
 
     for (const memory of memories) {
       const newScore = calculateDecayedScore(memory);
-      // Only include memories that have decayed significantly
-      if (Math.abs(newScore - memory.salience) > 0.01) {
+      // Only include memories that have decayed significantly since last update
+      // Compare to decayedScore (not salience) to detect actual changes
+      if (Math.abs(newScore - memory.decayedScore) > 0.01) {
         updates.push({
           memoryId: memory.id,
-          oldScore: memory.salience,
+          oldScore: memory.decayedScore,
           newScore,
         });
       }
@@ -507,6 +672,47 @@ export function startVisualizationServer(dbPath?: string): void {
   // START SERVER
   // ============================================
 
+  // Start brain worker before starting server
+  brainWorker.start();
+
+  // Graceful shutdown handler
+  function gracefulShutdown(signal: string) {
+    console.log(`\n[Server] Received ${signal}, shutting down gracefully...`);
+
+    // Stop the brain worker
+    brainWorker.stop();
+
+    // Close WebSocket connections
+    for (const client of clients) {
+      client.close();
+    }
+    clients.clear();
+
+    // Close the HTTP server
+    server.close(() => {
+      console.log('[Server] HTTP server closed');
+
+      // Checkpoint WAL before exit
+      try {
+        checkpointWal();
+        console.log('[Server] WAL checkpointed');
+      } catch (e) {
+        console.error('[Server] Failed to checkpoint WAL:', e);
+      }
+
+      process.exit(0);
+    });
+
+    // Force exit after 10 seconds
+    setTimeout(() => {
+      console.error('[Server] Forced exit after timeout');
+      process.exit(1);
+    }, 10000);
+  }
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
   server.listen(PORT, () => {
     console.log(`
 ╔══════════════════════════════════════════════════════════════╗
@@ -527,6 +733,11 @@ export function startVisualizationServer(dbPath?: string): void {
 ║    POST /api/consolidate    - Trigger consolidation          ║
 ║    GET  /api/context        - Context summary                ║
 ║    GET  /api/suggestions    - Search autocomplete            ║
+║                                                              ║
+║  Brain Worker (Phase 4):                                     ║
+║    GET  /api/worker/status       - Worker status             ║
+║    POST /api/worker/trigger-light  - Trigger light tick      ║
+║    POST /api/worker/trigger-medium - Trigger medium tick     ║
 ╚══════════════════════════════════════════════════════════════╝
     `);
   });

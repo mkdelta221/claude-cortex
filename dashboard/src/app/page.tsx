@@ -99,6 +99,13 @@ export default function DashboardPage() {
     setSelectedMemory(memory);
   };
 
+  const handleSelectMemoryById = (id: number) => {
+    const memory = memories.find(m => m.id === id);
+    if (memory) {
+      setSelectedMemory(memory);
+    }
+  };
+
   const handleReinforce = (id: number) => {
     accessMutation.mutate(id);
   };
@@ -289,8 +296,11 @@ export default function DashboardPage() {
           <div className="w-80 border-l border-slate-800 overflow-y-auto shrink-0">
             <MemoryDetail
               memory={selectedMemory}
+              links={links}
+              memories={memories}
               onClose={() => setSelectedMemory(null)}
               onReinforce={handleReinforce}
+              onSelectMemory={handleSelectMemoryById}
             />
           </div>
         )}

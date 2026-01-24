@@ -155,7 +155,8 @@ process.stdin.on('end', () => {
     }
 
     // Connect to database (read-only to avoid contention)
-    const db = new Database(DB_PATH, { readonly: true });
+    // timeout: 5000ms to handle busy database during concurrent access
+    const db = new Database(DB_PATH, { readonly: true, timeout: 5000 });
 
     // Get project context
     const memories = getProjectContext(db, project);

@@ -33,6 +33,10 @@ import {
   shouldDelete,
   processDecay,
 } from './decay.js';
+import {
+  detectContradictions,
+  linkContradictions,
+} from './contradiction.js';
 
 /**
  * Run full consolidation process
@@ -83,7 +87,20 @@ export function consolidate(
     // Persist updated decay scores for efficient sorting
     updateDecayScores();
 
-    return { consolidated, decayed, deleted };
+    // ORGANIC FEATURE: Contradiction Detection (Phase 3)
+    // Detect and link contradicting memories during consolidation
+    let contradictionsFound = 0;
+    let contradictionsLinked = 0;
+
+    try {
+      const contradictions = detectContradictions({ minScore: 0.5, limit: 50 });
+      contradictionsFound = contradictions.length;
+      contradictionsLinked = linkContradictions(contradictions);
+    } catch (e) {
+      console.error('[claude-memory] Contradiction detection failed:', e);
+    }
+
+    return { consolidated, decayed, deleted, contradictionsFound, contradictionsLinked };
   });
 }
 

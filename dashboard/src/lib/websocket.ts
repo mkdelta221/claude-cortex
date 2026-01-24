@@ -16,7 +16,12 @@ export type WebSocketEventType =
   | 'memory_updated'
   | 'memory_deleted'
   | 'consolidation_complete'
-  | 'decay_tick';
+  | 'decay_tick'
+  // Phase 4: Worker events
+  | 'worker_light_tick'
+  | 'worker_medium_tick'
+  | 'link_discovered'
+  | 'predictive_consolidation';
 
 interface WebSocketMessage {
   type: WebSocketEventType;
@@ -28,6 +33,11 @@ interface UseMemoryWebSocketOptions {
   onMessage?: (event: WebSocketMessage) => void;
 }
 
+// Reconnection configuration
+const INITIAL_RECONNECT_DELAY = 1000; // 1 second
+const MAX_RECONNECT_DELAY = 30000; // 30 seconds max
+const MAX_RECONNECT_ATTEMPTS = 10;
+
 /**
  * Hook to connect to memory WebSocket and handle real-time updates
  */
@@ -36,11 +46,19 @@ export function useMemoryWebSocket(options: UseMemoryWebSocketOptions = {}) {
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY);
   const [isConnected, setIsConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<WebSocketEventType | null>(null);
 
   const connect = useCallback(() => {
     if (!enabled || wsRef.current?.readyState === WebSocket.OPEN) return;
+
+    // Clear any pending reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
 
     try {
       const ws = new WebSocket(WS_URL);
@@ -48,6 +66,9 @@ export function useMemoryWebSocket(options: UseMemoryWebSocketOptions = {}) {
 
       ws.onopen = () => {
         setIsConnected(true);
+        // Reset reconnect state on successful connection
+        reconnectAttemptsRef.current = 0;
+        reconnectDelayRef.current = INITIAL_RECONNECT_DELAY;
         console.log('[WebSocket] Connected to memory server');
       };
 
@@ -88,6 +109,25 @@ export function useMemoryWebSocket(options: UseMemoryWebSocketOptions = {}) {
               // We don't invalidate here to avoid constant refetches
               // The dashboard can handle this via the onMessage callback
               break;
+
+            // Phase 4: Worker events
+            case 'link_discovered':
+              // New link created, refresh links
+              queryClient.invalidateQueries({ queryKey: ['links'] });
+              break;
+
+            case 'predictive_consolidation':
+              // Predictive consolidation ran, refresh everything
+              queryClient.invalidateQueries({ queryKey: ['memories'] });
+              queryClient.invalidateQueries({ queryKey: ['stats'] });
+              queryClient.invalidateQueries({ queryKey: ['links'] });
+              break;
+
+            case 'worker_light_tick':
+            case 'worker_medium_tick':
+              // Worker ticks don't require cache invalidation
+              // Dashboard can track via onMessage callback if needed
+              break;
           }
         } catch (err) {
           console.error('[WebSocket] Failed to parse message:', err);
@@ -102,12 +142,26 @@ export function useMemoryWebSocket(options: UseMemoryWebSocketOptions = {}) {
         setIsConnected(false);
         console.log('[WebSocket] Disconnected');
 
-        // Attempt to reconnect after 5 seconds
-        if (enabled) {
+        // Attempt to reconnect with exponential backoff
+        if (enabled && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+          const delay = reconnectDelayRef.current;
+          reconnectAttemptsRef.current++;
+
+          // Exponential backoff: double the delay each time, up to max
+          reconnectDelayRef.current = Math.min(
+            reconnectDelayRef.current * 2,
+            MAX_RECONNECT_DELAY
+          );
+
+          console.log(
+            `[WebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})...`
+          );
+
           reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('[WebSocket] Attempting to reconnect...');
             connect();
-          }, 5000);
+          }, delay);
+        } else if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+          console.error('[WebSocket] Max reconnection attempts reached. Use reconnect() to try again.');
         }
       };
     } catch (err) {
@@ -132,9 +186,17 @@ export function useMemoryWebSocket(options: UseMemoryWebSocketOptions = {}) {
     };
   }, [enabled, connect]);
 
+  // Manual reconnect that resets backoff state
+  const manualReconnect = useCallback(() => {
+    reconnectAttemptsRef.current = 0;
+    reconnectDelayRef.current = INITIAL_RECONNECT_DELAY;
+    connect();
+  }, [connect]);
+
   return {
     isConnected,
     lastEvent,
-    reconnect: connect,
+    reconnect: manualReconnect,
+    reconnectAttempts: reconnectAttemptsRef.current,
   };
 }

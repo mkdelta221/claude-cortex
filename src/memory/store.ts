@@ -28,6 +28,11 @@ import {
   calculatePriority,
 } from './decay.js';
 import {
+  activateMemory as spreadActivation,
+  getActivationBoost,
+} from './activation.js';
+import { jaccardSimilarity } from './similarity.js';
+import {
   emitMemoryCreated,
   emitMemoryAccessed,
   emitMemoryDeleted,
@@ -96,7 +101,7 @@ function escapeFts5Query(query: string): string {
 /**
  * Convert database row to Memory object
  */
-function rowToMemory(row: Record<string, unknown>): Memory {
+export function rowToMemory(row: Record<string, unknown>): Memory {
   return {
     id: row.id as number,
     type: row.type as MemoryType,
@@ -109,7 +114,7 @@ function rowToMemory(row: Record<string, unknown>): Memory {
     accessCount: row.access_count as number,
     lastAccessed: new Date(row.last_accessed as string),
     createdAt: new Date(row.created_at as string),
-    decayedScore: row.decayed_score as number || row.salience as number,
+    decayedScore: (row.decayed_score as number) ?? (row.salience as number),
     metadata: JSON.parse((row.metadata as string) || '{}'),
   };
 }
@@ -165,6 +170,18 @@ export function addMemory(
 
   // Emit event for real-time dashboard
   emitMemoryCreated(memory);
+
+  // ORGANIC FEATURE: Auto-link to related memories
+  // This builds the knowledge graph automatically as memories are created
+  try {
+    const relationships = detectRelationships(memory);
+    for (const rel of relationships.slice(0, 3)) { // Top 3 most relevant
+      createMemoryLink(memory.id, rel.targetId, rel.relationship, rel.strength);
+    }
+  } catch (e) {
+    // Don't fail memory creation if linking fails
+    console.error('[claude-memory] Auto-link failed:', e);
+  }
 
   // Anti-bloat: Check if limits exceeded and trigger async cleanup
   // We use setImmediate to not block the insert response
@@ -306,7 +323,181 @@ export function accessMemory(
   // Emit event for real-time dashboard
   emitMemoryAccessed(updatedMemory, newSalience);
 
+  // ORGANIC FEATURE: Link strengthening on co-access
+  // If memory A and B are both accessed within 5 minutes, strengthen their link
+  // This mimics Hebbian learning: "neurons that fire together, wire together"
+  try {
+    const recentlyAccessed = db.prepare(`
+      SELECT id FROM memories
+      WHERE last_accessed > datetime('now', '-5 minutes')
+        AND id != ?
+      LIMIT 10
+    `).all(id) as { id: number }[];
+
+    for (const recent of recentlyAccessed) {
+      // Check if link exists in either direction
+      const existingLink = db.prepare(`
+        SELECT id, strength FROM memory_links
+        WHERE (source_id = ? AND target_id = ?) OR (source_id = ? AND target_id = ?)
+      `).get(id, recent.id, recent.id, id) as { id: number; strength: number } | undefined;
+
+      if (existingLink) {
+        // Strengthen existing link (cap at 1.0)
+        const newStrength = Math.min(1.0, existingLink.strength + 0.05);
+        db.prepare('UPDATE memory_links SET strength = ? WHERE id = ?')
+          .run(newStrength, existingLink.id);
+      } else {
+        // Create new weak link for co-accessed memories
+        createMemoryLink(id, recent.id, 'related', 0.2);
+      }
+    }
+  } catch (e) {
+    // Don't fail memory access if link strengthening fails
+    console.error('[claude-memory] Link strengthening failed:', e);
+  }
+
+  // ORGANIC FEATURE: Spreading Activation (Phase 2)
+  // Activate this memory and spread activation to linked memories
+  // This makes related memories easier to recall in subsequent searches
+  spreadActivation(id);
+
   return updatedMemory;
+}
+
+/**
+ * Soft access - updates last_accessed without boosting salience
+ * Used for search results to close the reinforcement loop
+ * ORGANIC FEATURE: This allows searched memories to stay fresh without
+ * artificially inflating their salience scores
+ */
+export function softAccessMemory(id: number): void {
+  const db = getDatabase();
+  db.prepare('UPDATE memories SET last_accessed = ? WHERE id = ?')
+    .run(new Date().toISOString(), id);
+}
+
+// ============================================
+// ORGANIC FEATURE: Memory Enrichment (Phase 3)
+// ============================================
+
+// Enrichment configuration
+const ENRICHMENT_SIMILARITY_THRESHOLD = 0.3; // Min similarity to trigger enrichment
+const ENRICHMENT_COOLDOWN_HOURS = 1; // Don't enrich same memory within 1 hour
+const MAX_ENRICHMENT_SIZE = 2000; // Max chars to add per enrichment
+
+// Track last enrichment times (in-memory, ephemeral like activation cache)
+const enrichmentTimestamps = new Map<number, number>();
+
+/**
+ * Enrichment result indicating what happened
+ */
+export interface EnrichmentResult {
+  enriched: boolean;
+  reason: string;
+}
+
+/**
+ * Enrich a memory with additional context
+ *
+ * This adds timestamped context to a memory when:
+ * 1. The new context is sufficiently related but different (new information)
+ * 2. The memory hasn't been enriched recently (cooldown)
+ * 3. The content won't exceed the size limit
+ *
+ * ORGANIC FEATURE: Memories grow with new context over time,
+ * mimicking how human memories are reconsolidated with new information
+ *
+ * @param memoryId - ID of the memory to enrich
+ * @param newContext - New context to add
+ * @param contextType - Type of context ('search' | 'access' | 'related')
+ * @returns EnrichmentResult indicating success or failure with reason
+ */
+export function enrichMemory(
+  memoryId: number,
+  newContext: string,
+  contextType: 'search' | 'access' | 'related' = 'access'
+): EnrichmentResult {
+  const db = getDatabase();
+  const memory = getMemoryById(memoryId);
+
+  if (!memory) {
+    return { enriched: false, reason: 'Memory not found' };
+  }
+
+  // Check cooldown
+  const lastEnrichment = enrichmentTimestamps.get(memoryId);
+  const now = Date.now();
+  if (lastEnrichment && (now - lastEnrichment) < ENRICHMENT_COOLDOWN_HOURS * 60 * 60 * 1000) {
+    return { enriched: false, reason: 'Enrichment cooldown active' };
+  }
+
+  // Check similarity - should be related but not too similar (new info)
+  const similarity = jaccardSimilarity(memory.content, newContext);
+  if (similarity > 0.8) {
+    return { enriched: false, reason: 'Context too similar (no new information)' };
+  }
+  if (similarity < ENRICHMENT_SIMILARITY_THRESHOLD) {
+    return { enriched: false, reason: 'Context not sufficiently related' };
+  }
+
+  // Truncate context if needed
+  const truncatedContext = newContext.slice(0, MAX_ENRICHMENT_SIZE);
+
+  // Build enrichment block with timestamp
+  const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const enrichmentBlock = `\n\n---\n[${timestamp}] ${contextType}: ${truncatedContext}`;
+
+  // Check size limit (leave 500 char buffer for future enrichments)
+  const newContent = memory.content + enrichmentBlock;
+  if (newContent.length > MAX_CONTENT_SIZE - 500) {
+    return { enriched: false, reason: 'Content size limit reached' };
+  }
+
+  // Update memory
+  db.prepare(`
+    UPDATE memories
+    SET content = ?,
+        last_accessed = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(newContent, memoryId);
+
+  // Update cooldown timestamp
+  enrichmentTimestamps.set(memoryId, now);
+
+  // Emit update event for dashboard
+  const updatedMemory = getMemoryById(memoryId)!;
+  emitMemoryUpdated(updatedMemory);
+
+  return { enriched: true, reason: `Added ${contextType} context (${truncatedContext.length} chars)` };
+}
+
+/**
+ * Clear enrichment cooldown for a memory (for testing)
+ */
+export function clearEnrichmentCooldown(memoryId: number): void {
+  enrichmentTimestamps.delete(memoryId);
+}
+
+/**
+ * Get enrichment cooldown status for a memory
+ */
+export function getEnrichmentCooldownStatus(memoryId: number): {
+  onCooldown: boolean;
+  remainingMs: number;
+} {
+  const lastEnrichment = enrichmentTimestamps.get(memoryId);
+  if (!lastEnrichment) {
+    return { onCooldown: false, remainingMs: 0 };
+  }
+
+  const cooldownMs = ENRICHMENT_COOLDOWN_HOURS * 60 * 60 * 1000;
+  const elapsed = Date.now() - lastEnrichment;
+  const remaining = Math.max(0, cooldownMs - elapsed);
+
+  return {
+    onCooldown: remaining > 0,
+    remainingMs: remaining,
+  };
 }
 
 /**
@@ -519,21 +710,34 @@ export function searchMemories(
     // Partial tag match bonus
     const tagBoost = calculateTagScore(queryTags, memory.tags);
 
+    // ORGANIC FEATURE: Spreading Activation boost (Phase 2)
+    // Recently accessed memories and their linked neighbors get a boost
+    const activationBoost = getActivationBoost(memory.id);
+
     // Combined relevance score
     const relevanceScore = (
       ftsScore * 0.35 +
       decayedScore * 0.35 +
       calculatePriority(memory) * 0.15 +
-      recencyBoost + categoryBoost + linkBoost + tagBoost
+      recencyBoost + categoryBoost + linkBoost + tagBoost + activationBoost
     );
 
     return { memory, relevanceScore };
   });
 
   // Sort by relevance and filter out too-decayed memories
-  return results
+  const sortedResults = results
     .filter(r => options.includeDecayed || r.memory.decayedScore >= config.salienceThreshold)
     .sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+  // ORGANIC FEATURE: Soft-access top results to reinforce useful memories
+  // This closes the reinforcement loop - memories that appear in searches stay fresh
+  // We only soft-access (update last_accessed, no salience boost) to avoid inflation
+  for (const result of sortedResults.slice(0, 5)) {
+    softAccessMemory(result.memory.id);
+  }
+
+  return sortedResults;
 }
 
 /**

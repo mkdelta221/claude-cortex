@@ -9,7 +9,14 @@ import { Memory, MemoryConfig, DEFAULT_CONFIG, DELETION_THRESHOLDS } from './typ
 
 /**
  * Calculate the current decayed score for a memory
- * Uses exponential decay: score = base_score * (decay_rate ^ hours_since_access)
+ * Uses exponential decay: score = base_score * (decay_rate ^ effective_hours)
+ *
+ * Memory types have different decay rates:
+ * - Short-term: hourly decay (fastest)
+ * - Episodic: 6-hour decay (medium)
+ * - Long-term: daily decay (slowest)
+ *
+ * Access count slows decay (multiplicative bonus, not additive)
  */
 export function calculateDecayedScore(
   memory: Memory,
@@ -19,26 +26,26 @@ export function calculateDecayedScore(
   const lastAccessed = new Date(memory.lastAccessed);
   const hoursSinceAccess = (now.getTime() - lastAccessed.getTime()) / (1000 * 60 * 60);
 
-  // Base score is the original salience
-  let score = memory.salience;
-
-  // Apply decay based on time
-  const decayFactor = Math.pow(config.decayRate, hoursSinceAccess);
-  score *= decayFactor;
-
-  // Apply access count bonus (frequently accessed memories decay slower)
-  const accessBonus = Math.min(0.3, memory.accessCount * 0.02);
-  score += accessBonus;
-
-  // Long-term memories decay much slower
+  // Determine effective decay period based on memory type
+  // This is applied FIRST, not as a replacement after calculation
+  let effectiveHours = hoursSinceAccess;
   if (memory.type === 'long_term') {
-    score = memory.salience * Math.pow(config.decayRate, hoursSinceAccess / 24); // Daily decay instead of hourly
+    effectiveHours = hoursSinceAccess / 24; // Daily decay instead of hourly
+  } else if (memory.type === 'episodic') {
+    effectiveHours = hoursSinceAccess / 6; // 6-hour decay rate
   }
 
-  // Episodic memories have medium decay
-  if (memory.type === 'episodic') {
-    score = memory.salience * Math.pow(config.decayRate, hoursSinceAccess / 6); // 6-hour decay rate
-  }
+  // Apply access count bonus to SLOW decay (multiplicative, not additive)
+  // Frequently accessed memories decay slower - up to 30% slower
+  // This prevents score inflation beyond original salience
+  const accessSlowdown = 1 + Math.min(0.3, memory.accessCount * 0.02);
+  effectiveHours = effectiveHours / accessSlowdown;
+
+  // Calculate decay factor with type-adjusted and access-adjusted time
+  const decayFactor = Math.pow(config.decayRate, effectiveHours);
+
+  // Apply decay to salience - score can never exceed original salience
+  const score = memory.salience * decayFactor;
 
   return Math.max(0, Math.min(1, score));
 }

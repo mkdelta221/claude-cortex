@@ -31,7 +31,8 @@ import {
   importSchema, executeImport,
 } from './tools/context.js';
 import { generateContextSummary, formatContextSummary, consolidate, fullCleanup } from './memory/consolidate.js';
-import { getHighPriorityMemories, getRecentMemories, getRelatedMemories, createMemoryLink, RelationshipType } from './memory/store.js';
+import { getHighPriorityMemories, getRecentMemories, getRelatedMemories, createMemoryLink, RelationshipType, enrichMemory } from './memory/store.js';
+import { detectContradictions, getContradictionsFor } from './memory/contradiction.js';
 import { checkDatabaseSize } from './database/init.js';
 
 /**
@@ -428,6 +429,62 @@ Returns: architecture decisions, patterns, pending items, recent activity.`,
         `**Detection Source:** ${info.source}`,
         `**Scope:** ${info.isGlobal ? 'Global - queries return all projects' : `Scoped - queries filtered to "${info.project}"`}`,
       ];
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    }
+  );
+
+  // ============================================
+  // ORGANIC BRAIN TOOLS (Phase 3)
+  // ============================================
+
+  // Detect Contradictions - Find conflicting memories
+  server.tool(
+    'detect_contradictions',
+    `Scan memories for potential contradictions. Finds memories that may contain
+conflicting information about the same topic, such as:
+- Different solutions to the same problem
+- Conflicting recommendations (use X vs don't use X)
+- Opposite decisions or preferences
+
+Contradictions are automatically detected during consolidation and linked,
+but you can use this tool to check for new contradictions at any time.`,
+    {
+      project: z.string().optional().describe('Filter by project (omit for current project)'),
+      category: z.enum([
+        'architecture', 'pattern', 'preference', 'error',
+        'context', 'learning', 'todo', 'note', 'relationship', 'custom'
+      ]).optional().describe('Filter by category'),
+      minScore: z.number().min(0).max(1).optional().default(0.4)
+        .describe('Minimum contradiction score (0-1, default 0.4)'),
+      limit: z.number().min(1).max(50).optional().default(10)
+        .describe('Maximum results to return'),
+    },
+    async (args) => {
+      const project = args.project ?? getActiveProject() ?? undefined;
+      const contradictions = detectContradictions({
+        project,
+        category: args.category,
+        minScore: args.minScore,
+        limit: args.limit,
+      });
+
+      if (contradictions.length === 0) {
+        return { content: [{ type: 'text', text: 'No contradictions detected.' }] };
+      }
+
+      const lines = ['## Potential Contradictions\n'];
+      for (const c of contradictions) {
+        lines.push(`### ${c.reason} (${(c.score * 100).toFixed(0)}% confidence)`);
+        lines.push(`**Memory A:** [#${c.memoryA.id}] ${c.memoryA.title}`);
+        lines.push(`**Memory B:** [#${c.memoryB.id}] ${c.memoryB.title}`);
+        if (c.sharedTopics.length > 0) {
+          lines.push(`**Shared Topics:** ${c.sharedTopics.join(', ')}`);
+        }
+        lines.push('');
+      }
+
+      lines.push(`\n*Found ${contradictions.length} potential contradiction(s). Use \`get_related\` to see linked contradictions.*`);
+
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
   );
