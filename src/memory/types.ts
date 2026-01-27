@@ -30,6 +30,9 @@ export interface Memory {
   createdAt: Date;
   decayedScore: number;    // Current score after decay
   metadata: Record<string, unknown>;
+  embedding?: Buffer;      // 384-dim float32 vector for semantic search
+  scope: 'project' | 'global';  // Memory visibility scope
+  transferable: boolean;   // Can be shared across projects
 }
 
 export interface MemoryInput {
@@ -41,6 +44,8 @@ export interface MemoryInput {
   tags?: string[];
   salience?: number;
   metadata?: Record<string, unknown>;
+  scope?: 'project' | 'global';  // Default: 'project'
+  transferable?: boolean;        // Default: false
 }
 
 export interface SearchOptions {
@@ -52,6 +57,7 @@ export interface SearchOptions {
   minSalience?: number;
   limit?: number;
   includeDecayed?: boolean;  // Include memories below decay threshold
+  includeGlobal?: boolean;   // Include global-scoped memories (default: true)
 }
 
 export interface SearchResult {

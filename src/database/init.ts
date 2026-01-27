@@ -103,13 +103,29 @@ function runMigrations(database: Database.Database): void {
     return;
   }
 
-  // Check if decayed_score column exists
+  // Check existing columns
   const tableInfo = database.prepare("PRAGMA table_info(memories)").all() as { name: string }[];
-  const hasDecayedScore = tableInfo.some(col => col.name === 'decayed_score');
+  const columnNames = new Set(tableInfo.map(col => col.name));
 
-  if (!hasDecayedScore) {
+  // Migration: decayed_score column
+  if (!columnNames.has('decayed_score')) {
     database.exec('ALTER TABLE memories ADD COLUMN decayed_score REAL');
     database.exec('CREATE INDEX IF NOT EXISTS idx_memories_decayed_score ON memories(decayed_score DESC)');
+  }
+
+  // Migration: embedding column for semantic search
+  if (!columnNames.has('embedding')) {
+    database.exec('ALTER TABLE memories ADD COLUMN embedding BLOB');
+  }
+
+  // Migration: scope column for cross-project knowledge
+  if (!columnNames.has('scope')) {
+    database.exec("ALTER TABLE memories ADD COLUMN scope TEXT DEFAULT 'project'");
+  }
+
+  // Migration: transferable column for cross-project sharing
+  if (!columnNames.has('transferable')) {
+    database.exec('ALTER TABLE memories ADD COLUMN transferable INTEGER DEFAULT 0');
   }
 }
 
@@ -257,7 +273,10 @@ function getInlineSchema(): string {
       access_count INTEGER DEFAULT 0,
       last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      metadata TEXT DEFAULT '{}'
+      metadata TEXT DEFAULT '{}',
+      embedding BLOB,
+      scope TEXT DEFAULT 'project',
+      transferable INTEGER DEFAULT 0
     );
 
     CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(

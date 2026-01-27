@@ -116,6 +116,9 @@ export function rowToMemory(row: Record<string, unknown>): Memory {
     createdAt: new Date(row.created_at as string),
     decayedScore: (row.decayed_score as number) ?? (row.salience as number),
     metadata: JSON.parse((row.metadata as string) || '{}'),
+    embedding: row.embedding as Buffer | undefined,
+    scope: (row.scope as 'project' | 'global') ?? 'project',
+    transferable: Boolean(row.transferable),
   };
 }
 
