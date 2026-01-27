@@ -38,6 +38,7 @@ import {
   emitMemoryDeleted,
   emitMemoryUpdated,
 } from '../api/events.js';
+import { generateEmbedding } from '../embeddings/index.js';
 
 // Anti-bloat: Maximum content size per memory (10KB)
 const MAX_CONTENT_SIZE = 10 * 1024;
@@ -123,6 +124,22 @@ export function rowToMemory(row: Record<string, unknown>): Memory {
 }
 
 /**
+ * Detect if memory content suggests global applicability
+ * Used to auto-set scope to 'global' for transferable knowledge
+ */
+function detectGlobalPattern(content: string, category: MemoryCategory, tags: string[]): boolean {
+  const globalCategories: MemoryCategory[] = ['pattern', 'preference', 'learning'];
+  const globalKeywords = ['always', 'never', 'best practice', 'general rule', 'universal'];
+  const globalTags = ['universal', 'global', 'general', 'cross-project'];
+
+  if (globalCategories.includes(category)) return true;
+  if (globalKeywords.some(k => content.toLowerCase().includes(k))) return true;
+  if (tags.some(t => globalTags.includes(t.toLowerCase()))) return true;
+
+  return false;
+}
+
+/**
  * Add a new memory
  */
 export function addMemory(
@@ -143,9 +160,14 @@ export function addMemory(
   // Determine type
   const type = input.type ?? (salience >= config.consolidationThreshold ? 'long_term' : 'short_term');
 
+  // Determine scope and transferable flag for cross-project knowledge
+  const scope = input.scope ??
+    (detectGlobalPattern(input.content, category, tags) ? 'global' : 'project');
+  const transferable = input.transferable ?? (scope === 'global' ? 1 : 0);
+
   const stmt = db.prepare(`
-    INSERT INTO memories (type, category, title, content, project, tags, salience, metadata)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO memories (type, category, title, content, project, tags, salience, metadata, scope, transferable)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   // Anti-bloat: Truncate content if too large
@@ -166,7 +188,9 @@ export function addMemory(
     input.project || null,
     JSON.stringify(tags),
     salience,
-    JSON.stringify(input.metadata || {})
+    JSON.stringify(input.metadata || {}),
+    scope,
+    transferable
   );
 
   const memory = getMemoryById(result.lastInsertRowid as number)!;
@@ -185,6 +209,21 @@ export function addMemory(
     // Don't fail memory creation if linking fails
     console.error('[claude-memory] Auto-link failed:', e);
   }
+
+  // SEMANTIC SEARCH: Generate embedding asynchronously (don't block INSERT)
+  const memoryId = memory.id;
+  generateEmbedding(input.title + ' ' + truncationResult.content)
+    .then(embedding => {
+      try {
+        db.prepare('UPDATE memories SET embedding = ? WHERE id = ?')
+          .run(Buffer.from(embedding.buffer), memoryId);
+      } catch (e) {
+        console.error('[claude-memory] Failed to store embedding:', e);
+      }
+    })
+    .catch(e => {
+      console.error('[claude-memory] Failed to generate embedding:', e);
+    });
 
   // Anti-bloat: Check if limits exceeded and trigger async cleanup
   // We use setImmediate to not block the insert response
