@@ -2,12 +2,11 @@
 
 /**
  * Brain Mesh
- * Procedurally generated brain shape with cortex-like convolutions
- * Uses simplex noise to create organic surface folds (gyri and sulci)
+ * Ghost wireframe outline of a brain shape for subtle context
+ * Uses simplex noise to create organic cortex-like surface folds
  */
 
-import { useMemo, useRef, useEffect } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { fbm3D, ridged3D } from '@/lib/simplex-noise';
 
@@ -82,158 +81,38 @@ function createBrainGeometry(): THREE.BufferGeometry {
   return geo;
 }
 
-/**
- * Inner core glow geometry (simpler, smoother)
- */
-function createCoreGeometry(): THREE.BufferGeometry {
-  const geo = new THREE.IcosahedronGeometry(2.5, 3);
-  return geo;
-}
-
 export function BrainMesh({
-  opacity = 0.25,
+  opacity = 0.05,
   showWireframe = true,
-  pulseIntensity = 0.3,
 }: BrainMeshProps) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const wireframeRef = useRef<THREE.Mesh>(null);
-  const coreRef = useRef<THREE.Mesh>(null);
-
-  // Create geometries once
+  // Create geometry once
   const brainGeometry = useMemo(() => createBrainGeometry(), []);
-  const coreGeometry = useMemo(() => createCoreGeometry(), []);
 
-  // Memoized materials
-  const brainMaterial = useMemo(
+  // Ghost wireframe material - very faint gray
+  const wireframeMaterial = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({
-        color: '#1A0A00',
+      new THREE.MeshBasicMaterial({
+        color: '#333333',
+        wireframe: true,
         transparent: true,
         opacity: opacity,
-        metalness: 0.3,
-        roughness: 0.7,
-        emissive: '#FF8C00',
-        emissiveIntensity: 0.1,
-        side: THREE.DoubleSide,
-        vertexColors: true,
       }),
     [opacity]
   );
 
-  const wireframeMaterial = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        color: '#FFB347',
-        wireframe: true,
-        transparent: true,
-        opacity: 0.12,
-      }),
-    []
-  );
-
-  const coreMaterial = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        color: '#FF8C00',
-        transparent: true,
-        opacity: 0.08,
-        depthWrite: false,
-      }),
-    []
-  );
-
-  // Cleanup geometries and materials on unmount to prevent GPU memory leaks
+  // Cleanup on unmount to prevent GPU memory leaks
   useEffect(() => {
     return () => {
       brainGeometry.dispose();
-      coreGeometry.dispose();
-      brainMaterial.dispose();
       wireframeMaterial.dispose();
-      coreMaterial.dispose();
     };
-  }, [brainGeometry, coreGeometry, brainMaterial, wireframeMaterial, coreMaterial]);
+  }, [brainGeometry, wireframeMaterial]);
 
-  // Subtle pulsing animation
-  useFrame((state) => {
-    if (!meshRef.current) return;
-
-    const time = state.clock.elapsedTime;
-
-    // Subtle holographic flicker (occasional micro-glitches)
-    const flicker = Math.random() > 0.98 ? 0.03 : 0;
-
-    // Gentle breathing
-    const breathe = Math.sin(time * 0.5) * 0.015 * pulseIntensity + 1;
-    meshRef.current.scale.setScalar(breathe);
-
-    if (wireframeRef.current) {
-      wireframeRef.current.scale.setScalar(breathe * 1.002);
-      // Apply flicker to wireframe for holographic effect
-      (wireframeRef.current.material as THREE.MeshBasicMaterial).opacity = 0.12 + flicker;
-    }
-
-    // Core pulsing
-    if (coreRef.current) {
-      const corePulse = Math.sin(time * 1.5) * 0.1 + 0.9;
-      coreRef.current.scale.setScalar(corePulse);
-      (coreRef.current.material as THREE.MeshBasicMaterial).opacity =
-        0.05 + Math.sin(time * 2) * 0.03 + flicker;
-    }
-
-    // Emissive intensity pulsing with flicker
-    (meshRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity =
-      0.08 + Math.sin(time * 0.8) * 0.04 + flicker;
-  });
+  // Only render wireframe - no solid surface, no core, no animation
+  if (!showWireframe) return null;
 
   return (
-    <group>
-      {/* Inner glowing core */}
-      <mesh ref={coreRef} geometry={coreGeometry} material={coreMaterial} />
-
-      {/* Main brain surface */}
-      <mesh ref={meshRef} geometry={brainGeometry} material={brainMaterial} />
-
-      {/* Wireframe overlay for digital feel */}
-      {showWireframe && (
-        <mesh
-          ref={wireframeRef}
-          geometry={brainGeometry}
-          material={wireframeMaterial}
-        />
-      )}
-    </group>
+    <mesh geometry={brainGeometry} material={wireframeMaterial} />
   );
 }
 
-/**
- * Hemisphere highlight - shows active region
- */
-export function HemisphereHighlight({
-  side,
-  intensity = 0.5,
-}: {
-  side: 'left' | 'right';
-  intensity?: number;
-}) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const position: [number, number, number] = side === 'left' ? [-1.5, 0, 0] : [1.5, 0, 0];
-
-  useFrame((state) => {
-    if (!meshRef.current) return;
-    const pulse = Math.sin(state.clock.elapsedTime * 3) * 0.3 + 0.7;
-    (meshRef.current.material as THREE.MeshBasicMaterial).opacity = intensity * pulse * 0.2;
-  });
-
-  return (
-    <mesh ref={meshRef} position={position}>
-      <sphereGeometry args={[2.5, 16, 16]} />
-      <meshBasicMaterial
-        color={side === 'left' ? '#ff6600' : '#00ff66'}
-        transparent
-        opacity={intensity * 0.15}
-        depthWrite={false}
-        side={THREE.BackSide}
-      />
-    </mesh>
-  );
-}

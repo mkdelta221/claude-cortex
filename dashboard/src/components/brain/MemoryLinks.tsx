@@ -19,7 +19,8 @@ interface MemoryLinksProps {
   onLinkClick?: (link: MemoryLink) => void;
 }
 
-// Relationship colors - neural/synaptic colors
+// Default connection color (light gray) and relationship colors for hover
+const DEFAULT_LINE_COLOR = '#cccccc';
 const RELATIONSHIP_STYLES: Record<string, { color: string; label: string }> = {
   references: { color: '#00d4ff', label: 'References' },  // Cyan - information flow
   extends: { color: '#00ff88', label: 'Extends' },        // Green - growth
@@ -27,15 +28,13 @@ const RELATIONSHIP_STYLES: Record<string, { color: string; label: string }> = {
   related: { color: '#b388ff', label: 'Related' },        // Purple - association
 };
 
-// Electrical signal that travels along the axon
+// Bright signal pulse that travels along the neural fiber
 function NeuralSignal({
   curve,
-  color,
   speed = 1,
   delay = 0,
 }: {
   curve: THREE.CatmullRomCurve3;
-  color: string;
   speed?: number;
   delay?: number;
 }) {
@@ -46,7 +45,7 @@ function NeuralSignal({
   useFrame((_, delta) => {
     if (!meshRef.current) return;
 
-    progressRef.current += delta * speed * 0.3;
+    progressRef.current += delta * speed * 0.6; // Fast signal speed
     if (progressRef.current > 1) {
       progressRef.current = 0;
     }
@@ -55,80 +54,38 @@ function NeuralSignal({
     const point = curve.getPoint(progressRef.current);
     meshRef.current.position.copy(point);
 
-    // Fade based on position (bright in middle, fade at ends)
-    const fadeIn = Math.min(progressRef.current * 4, 1);
-    const fadeOut = Math.min((1 - progressRef.current) * 4, 1);
-    const opacity = fadeIn * fadeOut * 0.9;
+    // Bright throughout, slight fade at ends
+    const fadeIn = Math.min(progressRef.current * 5, 1);
+    const fadeOut = Math.min((1 - progressRef.current) * 5, 1);
+    const opacity = fadeIn * fadeOut;
     (meshRef.current.material as THREE.MeshBasicMaterial).opacity = opacity;
 
     // Trail effect
     if (trailRef.current) {
-      const trailT = Math.max(0, progressRef.current - 0.05);
+      const trailT = Math.max(0, progressRef.current - 0.08);
       const trailPoint = curve.getPoint(trailT);
       trailRef.current.position.copy(trailPoint);
-      (trailRef.current.material as THREE.MeshBasicMaterial).opacity = opacity * 0.4;
+      (trailRef.current.material as THREE.MeshBasicMaterial).opacity = opacity * 0.5;
     }
   });
 
   return (
     <>
-      {/* Main signal */}
+      {/* Main signal - bright white */}
       <mesh ref={meshRef}>
-        <sphereGeometry args={[0.08, 8, 8]} />
-        <meshBasicMaterial color={color} transparent opacity={0.9} />
+        <sphereGeometry args={[0.15, 12, 12]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={1} />
       </mesh>
-      {/* Trail */}
+      {/* Glow trail */}
       <mesh ref={trailRef}>
-        <sphereGeometry args={[0.05, 6, 6]} />
-        <meshBasicMaterial color={color} transparent opacity={0.4} />
+        <sphereGeometry args={[0.1, 8, 8]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.6} />
       </mesh>
     </>
   );
 }
 
-// Synapse endpoint - glowing bulb where connections meet neurons
-function SynapseEndpoint({
-  position,
-  color,
-  isSource,
-}: {
-  position: THREE.Vector3;
-  color: string;
-  isSource: boolean;
-}) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const glowRef = useRef<THREE.Mesh>(null);
-
-  useFrame((state) => {
-    if (!meshRef.current) return;
-
-    // Pulsing glow
-    const pulse = Math.sin(state.clock.elapsedTime * 3) * 0.3 + 0.7;
-    (meshRef.current.material as THREE.MeshBasicMaterial).opacity = pulse * 0.8;
-
-    if (glowRef.current) {
-      glowRef.current.scale.setScalar(1 + pulse * 0.3);
-      (glowRef.current.material as THREE.MeshBasicMaterial).opacity = pulse * 0.3;
-    }
-  });
-
-  return (
-    <group position={position}>
-      {/* Outer glow */}
-      <mesh ref={glowRef}>
-        <sphereGeometry args={[0.15, 8, 8]} />
-        <meshBasicMaterial color={color} transparent opacity={0.3} depthWrite={false} />
-      </mesh>
-      {/* Core synapse */}
-      <mesh ref={meshRef}>
-        <sphereGeometry args={[0.08, 8, 8]} />
-        <meshBasicMaterial color={color} transparent opacity={0.9} />
-      </mesh>
-    </group>
-  );
-}
-
-// Single neural connection (axon) with organic curve
+// Single neural connection with organic curve
 function NeuralConnection({
   link,
   sourcePos,
@@ -180,38 +137,29 @@ function NeuralConnection({
     return { curve, points };
   }, [sourcePos, targetPos, link.strength]);
 
-  const lineWidth = isHovered ? 3 : 1.5 + link.strength;
+  // Gray by default, relationship color on hover
+  const lineColor = isHovered ? style.color : DEFAULT_LINE_COLOR;
+  const lineWidth = isHovered ? 4 : 2 + link.strength * 1.5;
 
   return (
     <group>
-      {/* Synapse endpoints */}
-      <SynapseEndpoint
-        position={new THREE.Vector3(sourcePos.x, sourcePos.y, sourcePos.z)}
-        color={style.color}
-        isSource={true}
-      />
-      <SynapseEndpoint
-        position={new THREE.Vector3(targetPos.x, targetPos.y, targetPos.z)}
-        color={style.color}
-        isSource={false}
-      />
-
-      {/* Axon line (organic curve) */}
+      {/* Neural fiber - gray by default, colored on hover */}
       <CatmullRomLine
         points={points}
-        color={style.color}
+        color={lineColor}
         lineWidth={lineWidth}
         transparent
-        opacity={isHovered ? 1 : 0.6 + link.strength * 0.3}
+        opacity={isHovered ? 1 : 0.8}
       />
 
-      {/* Electrical signals traveling along axon */}
-      <NeuralSignal curve={curve} color={style.color} speed={1 + link.strength} delay={0} />
-      {link.strength > 0.5 && (
-        <NeuralSignal curve={curve} color={style.color} speed={1 + link.strength} delay={0.5} />
+      {/* Bright white signal pulses traveling along fiber */}
+      <NeuralSignal curve={curve} speed={1.2 + link.strength} delay={0} />
+      <NeuralSignal curve={curve} speed={1.2 + link.strength} delay={0.5} />
+      {link.strength > 0.3 && (
+        <NeuralSignal curve={curve} speed={1.5 + link.strength} delay={0.25} />
       )}
-      {link.strength > 0.7 && (
-        <NeuralSignal curve={curve} color={style.color} speed={1.5 + link.strength} delay={0.25} />
+      {link.strength > 0.6 && (
+        <NeuralSignal curve={curve} speed={1.8 + link.strength} delay={0.75} />
       )}
 
       {/* Invisible hit area for hover */}
@@ -301,23 +249,6 @@ export function MemoryLinks({ memories, links, memoryPositions }: MemoryLinksPro
 
   return (
     <group name="neural-connections">
-      {/* Connection count badge */}
-      <Html position={[0, 5, 0]} center>
-        <div style={{
-          backgroundColor: 'rgba(0, 212, 255, 0.15)',
-          border: '1px solid rgba(0, 212, 255, 0.5)',
-          color: '#00d4ff',
-          padding: '6px 14px',
-          borderRadius: '20px',
-          fontSize: '12px',
-          fontWeight: 'bold',
-          backdropFilter: 'blur(8px)',
-          boxShadow: '0 0 20px rgba(0, 212, 255, 0.3)',
-        }}>
-          ⚡ {validLinks.length} synaptic connections
-        </div>
-      </Html>
-
       {validLinks.map((link) => {
         const sourcePos = memoryPositions.get(link.source_id)!;
         const targetPos = memoryPositions.get(link.target_id)!;

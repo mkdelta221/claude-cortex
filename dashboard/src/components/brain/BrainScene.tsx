@@ -14,23 +14,20 @@
 
 import { Suspense, useMemo, useState, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Stars } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette, ChromaticAberration, Noise } from '@react-three/postprocessing';
+import { OrbitControls } from '@react-three/drei';
+// Post-processing disabled for cleaner appearance
+// import { EffectComposer, Bloom, Vignette, ChromaticAberration, Noise } from '@react-three/postprocessing';
 import { Memory, MemoryLink, MemoryCategory } from '@/types/memory';
 import { MemoryNode } from './MemoryNode';
 import { MemoryLinks } from './MemoryLinks';
 import { BrainMesh } from './BrainMesh';
-import { BrainRegions } from './BrainRegions';
-import { NeuralPathways } from './NeuralPathways';
-import { SynapseNetwork } from './SynapseNodes';
-import { ElectronFlow, SpiralFlow } from './ElectronFlow';
 import { ActivityPulseSystem, Pulse } from './ActivityPulseSystem';
-import { CategoryLabels } from './CategoryLabels';
 import { TimelineControls } from './TimelineControls';
+// Removed for cleaner design: BrainRegions, Stars
 import { calculateMemoryPosition } from '@/lib/position-algorithm';
 import { useMemoryWebSocket } from '@/lib/websocket';
 
-type ColorMode = 'category' | 'health' | 'age';
+type ColorMode = 'category' | 'health' | 'age' | 'holographic';
 
 interface BrainSceneProps {
   memories: Memory[];
@@ -56,10 +53,12 @@ function BrainContent({
   onPulseComplete,
   memoryCategoryCounts,
 }: BrainContentProps) {
-  // Calculate positions for all memories (guard against null/undefined)
+  // Calculate positions for all memories (deduplicate by ID to prevent React key errors)
   const memoryPositions = useMemo(() => {
     if (!memories || memories.length === 0) return [];
-    return memories.map((memory) => ({
+    // Use Map to deduplicate by memory ID
+    const uniqueMemories = new Map(memories.map(m => [m.id, m]));
+    return Array.from(uniqueMemories.values()).map((memory) => ({
       memory,
       position: calculateMemoryPosition(memory),
     }));
@@ -74,57 +73,23 @@ function BrainContent({
     return map;
   }, [memoryPositions]);
 
-  // Count memories by type for region sizing
-  const memoryCounts = useMemo(() => {
-    const counts = { shortTerm: 0, episodic: 0, longTerm: 0 };
-    memories.forEach((m) => {
-      if (m.type === 'short_term') counts.shortTerm++;
-      else if (m.type === 'episodic') counts.episodic++;
-      else if (m.type === 'long_term') counts.longTerm++;
-    });
-    return counts;
-  }, [memories]);
-
   return (
     <>
-      {/* Ambient lighting - warm golden Jarvis-inspired */}
-      <ambientLight intensity={0.08} color="#FFB347" />
-      <pointLight position={[10, 10, 10]} intensity={0.6} color="#FFB347" />
-      <pointLight position={[-10, -10, -10]} intensity={0.4} color="#FF8C00" />
-      <pointLight position={[0, 8, 0]} intensity={0.3} color="#FFD700" />
-      <pointLight position={[0, -5, 0]} intensity={0.2} color="#FF6600" />
+      {/* Simple, even lighting for maximum clarity */}
+      <ambientLight intensity={0.6} color="#ffffff" />
+      <directionalLight position={[5, 5, 5]} intensity={0.3} color="#ffffff" />
 
-      {/* Procedural brain mesh with cortex */}
-      <BrainMesh opacity={0.2} showWireframe={true} pulseIntensity={0.4} />
+      {/* Ghost brain outline - barely visible context */}
+      <BrainMesh opacity={0.05} showWireframe={true} pulseIntensity={0} />
 
-      {/* Volumetric brain regions */}
-      <BrainRegions
-        shortTermCount={memoryCounts.shortTerm}
-        episodicCount={memoryCounts.episodic}
-        longTermCount={memoryCounts.longTerm}
-        showLabels={false}
-      />
-
-      {/* Neural pathway network */}
-      <NeuralPathways />
-
-      {/* Synapse junction nodes */}
-      <SynapseNetwork />
-
-      {/* Electron flow particles */}
-      <ElectronFlow count={250} speed={0.6} size={0.035} />
-
-      {/* Decorative spiral flow */}
-      <SpiralFlow count={60} radius={4.5} speed={0.2} color="#FFB347" />
-
-      {/* Memory links (connections between related memories) */}
+      {/* Neural connections - the main visual feature */}
       <MemoryLinks
         memories={memories}
         links={links}
         memoryPositions={positionMap}
       />
 
-      {/* Memory nodes */}
+      {/* Memory nodes - clear, colored spheres */}
       {memoryPositions.map(({ memory, position }) => (
         <MemoryNode
           key={memory.id}
@@ -136,51 +101,20 @@ function BrainContent({
         />
       ))}
 
-      {/* Category region labels */}
-      <CategoryLabels memoryCounts={memoryCategoryCounts} radius={5.5} showCounts={true} />
-
       {/* Activity pulses for real-time events */}
       <ActivityPulseSystem pulses={pulses} onPulseComplete={onPulseComplete} />
 
-      {/* Camera controls */}
+      {/* Camera controls - user controlled, no auto-rotate */}
       <OrbitControls
         enablePan={true}
         enableZoom={true}
         enableRotate={true}
         minDistance={5}
         maxDistance={25}
-        autoRotate={!selectedMemory}
-        autoRotateSpeed={0.2}
+        autoRotate={false}
         dampingFactor={0.05}
         enableDamping
       />
-
-      {/* Background stars */}
-      <Stars
-        radius={80}
-        depth={60}
-        count={1500}
-        factor={3}
-        saturation={0.1}
-        fade
-        speed={0.3}
-      />
-
-      {/* Post-processing effects */}
-      <EffectComposer>
-        <Bloom
-          luminanceThreshold={0.08}
-          luminanceSmoothing={0.6}
-          intensity={2.5}
-          radius={1.4}
-        />
-        <ChromaticAberration offset={[0.0008, 0.0008]} />
-        <Noise opacity={0.03} />
-        <Vignette
-          darkness={0.55}
-          offset={0.2}
-        />
-      </EffectComposer>
     </>
   );
 }
@@ -299,56 +233,14 @@ export function BrainScene({
         </Suspense>
       </Canvas>
 
-      {/* Legend overlay */}
+      {/* Simple info overlay */}
       <div className="absolute bottom-4 left-4 bg-slate-900/90 border border-slate-700 rounded-lg p-3 text-xs backdrop-blur-sm">
-        <h4 className="font-semibold text-white mb-2">Memory Regions</h4>
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-orange-500" />
-            <span className="text-slate-300">Short-Term (Front)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-purple-500" />
-            <span className="text-slate-300">Episodic (Middle)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-500" />
-            <span className="text-slate-300">Long-Term (Back)</span>
-          </div>
-        </div>
-        <div className="mt-3 pt-2 border-t border-slate-700">
-          <p className="text-slate-400">
-            {filteredMemories.length} memories • Click to select
-          </p>
-        </div>
-
-        {/* Color mode legend */}
-        {colorMode === 'health' && (
-          <div className="mt-2 pt-2 border-t border-slate-700">
-            <div className="text-slate-400 mb-1">Health:</div>
-            <div className="flex items-center gap-1 text-[10px]">
-              <div className="w-2 h-2 rounded-full bg-green-500" />
-              <span className="text-slate-400">Healthy</span>
-              <div className="w-2 h-2 rounded-full bg-yellow-500 ml-1" />
-              <span className="text-slate-400">Moderate</span>
-              <div className="w-2 h-2 rounded-full bg-red-500 ml-1" />
-              <span className="text-slate-400">At Risk</span>
-            </div>
-          </div>
-        )}
-        {colorMode === 'age' && (
-          <div className="mt-2 pt-2 border-t border-slate-700">
-            <div className="text-slate-400 mb-1">Age:</div>
-            <div className="flex items-center gap-1 text-[10px]">
-              <div className="w-2 h-2 rounded-full bg-cyan-400" />
-              <span className="text-slate-400">New</span>
-              <div className="w-2 h-2 rounded-full bg-green-500 ml-1" />
-              <span className="text-slate-400">Recent</span>
-              <div className="w-2 h-2 rounded-full bg-amber-500 ml-1" />
-              <span className="text-slate-400">Old</span>
-            </div>
-          </div>
-        )}
+        <p className="text-slate-300">
+          {filteredMemories.length} memories
+        </p>
+        <p className="text-slate-500 mt-1">
+          Click to select • Drag to rotate
+        </p>
       </div>
 
       {/* Timeline and color controls */}
@@ -358,18 +250,6 @@ export function BrainScene({
         colorMode={colorMode}
         onColorModeChange={setColorMode}
       />
-
-      {/* Neural activity indicator */}
-      <div className="absolute top-4 right-4 flex items-center gap-2 bg-slate-900/80 border border-slate-700 rounded-full px-3 py-1.5 backdrop-blur-sm">
-        <div
-          className={`w-2 h-2 rounded-full ${
-            pulses.length > 0 ? 'bg-green-400 animate-ping' : 'bg-cyan-400 animate-pulse'
-          }`}
-        />
-        <span className="text-xs text-cyan-400 font-medium">
-          {pulses.length > 0 ? 'Active' : 'Neural Activity'}
-        </span>
-      </div>
     </div>
   );
 }

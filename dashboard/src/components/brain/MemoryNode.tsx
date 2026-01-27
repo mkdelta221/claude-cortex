@@ -18,17 +18,73 @@ import * as THREE from 'three';
 import { Memory } from '@/types/memory';
 import { getCategoryColor } from '@/lib/category-colors';
 import { calculateDecayFactor } from '@/lib/position-algorithm';
+import { getAgeColor } from './TimelineControls';
+
+// Holographic color palette (for holographic color mode)
+const JARVIS_GOLD = '#FFD700';
+const JARVIS_AMBER = '#FFB347';
+const JARVIS_ORANGE = '#FF8C00';
 
 interface MemoryNodeProps {
   memory: Memory;
   position: [number, number, number];
   onSelect: (memory: Memory) => void;
   isSelected: boolean;
+  colorMode?: 'category' | 'health' | 'age' | 'holographic'; // category = by type, health = decay heat map, age = time-based, holographic = Jarvis-style golden
+}
+
+/**
+ * Format memory age for display
+ */
+function formatAge(createdAt: string | Date): string {
+  const age = Date.now() - new Date(createdAt).getTime();
+  const hours = age / (60 * 60 * 1000);
+
+  if (hours < 1) return `${Math.round(hours * 60)}m ago`;
+  if (hours < 24) return `${Math.round(hours)}h ago`;
+  if (hours < 24 * 7) return `${Math.round(hours / 24)}d ago`;
+  if (hours < 24 * 30) return `${Math.round(hours / (24 * 7))}w ago`;
+  return `${Math.round(hours / (24 * 30))}mo ago`;
+}
+
+/**
+ * Calculate holographic color based on salience - Jarvis-style golden
+ * High salience = bright gold, low salience = deep orange
+ */
+function getHolographicColor(salience: number): string {
+  if (salience > 0.7) return JARVIS_GOLD; // High salience - bright gold
+  if (salience > 0.4) return JARVIS_AMBER; // Medium salience - warm gold
+  return JARVIS_ORANGE; // Low salience - deep orange
+}
+
+/**
+ * Calculate health color based on salience and decay
+ * Green (healthy) → Yellow (moderate) → Red (at risk)
+ */
+function getHealthColor(salience: number, decayFactor: number): string {
+  const health = salience * decayFactor;
+
+  if (health > 0.6) {
+    // Green - healthy
+    return '#22c55e';
+  } else if (health > 0.35) {
+    // Yellow - moderate
+    const t = (health - 0.35) / 0.25; // 0 to 1 within yellow range
+    // Interpolate from orange to yellow
+    const r = Math.round(245 - t * 11); // 245 to 234
+    const g = Math.round(158 + t * 21); // 158 to 179
+    return `rgb(${r}, ${g}, 66)`;
+  } else {
+    // Red/Orange - at risk
+    const t = health / 0.35; // 0 to 1 within red range
+    const r = Math.round(239); // red
+    const g = Math.round(68 + t * 90); // 68 to 158
+    return `rgb(${r}, ${g}, 68)`;
+  }
 }
 
 // Shared geometries (created once, reused by all nodes)
-const GLOW_GEOMETRY = new THREE.SphereGeometry(1, 8, 8);
-const NODE_GEOMETRY = new THREE.SphereGeometry(1, 12, 12);
+const NODE_GEOMETRY = new THREE.SphereGeometry(1, 16, 16);
 const RING_GEOMETRY = new THREE.RingGeometry(1, 1.15, 24);
 
 function MemoryNodeInner({
@@ -36,85 +92,59 @@ function MemoryNodeInner({
   position,
   onSelect,
   isSelected,
+  colorMode = 'category',
 }: MemoryNodeProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const glowRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
   const { camera } = useThree();
 
   // Calculate visual properties (memoized)
   const decayFactor = useMemo(() => calculateDecayFactor(memory), [memory]);
-  const baseColor = useMemo(() => getCategoryColor(memory.category), [memory.category]);
-
-  // Node size based on salience (0.15 to 0.4)
-  const size = useMemo(() => 0.15 + memory.salience * 0.25, [memory.salience]);
-
-  // Glow intensity based on decay
-  const glowIntensity = useMemo(
-    () => memory.salience * decayFactor,
+  const categoryColor = useMemo(() => getCategoryColor(memory.category), [memory.category]);
+  const healthColor = useMemo(
+    () => getHealthColor(memory.salience, decayFactor),
     [memory.salience, decayFactor]
   );
+  const ageColor = useMemo(() => getAgeColor(memory.createdAt), [memory.createdAt]);
+  const holographicColor = useMemo(() => getHolographicColor(memory.salience), [memory.salience]);
 
-  // Memoized materials to prevent recreation
-  const glowMaterial = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        color: baseColor,
-        transparent: true,
-        opacity: glowIntensity * 0.2,
-        depthWrite: false,
-      }),
-    [baseColor, glowIntensity]
-  );
+  // Select color based on mode
+  const baseColor = useMemo(() => {
+    switch (colorMode) {
+      case 'health': return healthColor;
+      case 'age': return ageColor;
+      case 'holographic': return holographicColor;
+      default: return categoryColor;
+    }
+  }, [colorMode, healthColor, ageColor, holographicColor, categoryColor]);
 
+  // Node size based on salience (0.2 to 0.4) - larger for better visibility
+  const size = useMemo(() => 0.2 + memory.salience * 0.2, [memory.salience]);
+
+  // Solid node material - no transparency for clarity
   const nodeMaterial = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
         color: baseColor,
         emissive: baseColor,
-        emissiveIntensity: glowIntensity,
-        metalness: 0.3,
-        roughness: 0.4,
-        transparent: true,
-        opacity: 0.7 + decayFactor * 0.3,
+        emissiveIntensity: 0.3,
+        metalness: 0.2,
+        roughness: 0.5,
       }),
-    [baseColor, glowIntensity, decayFactor]
+    [baseColor]
   );
 
-  // Animation with frustum culling check
-  useFrame((state) => {
+  // Subtle animation - increase emissive on hover
+  useFrame(() => {
     if (!meshRef.current) return;
 
-    // Simple frustum culling - skip animation if far from camera
-    const distanceToCamera = meshRef.current.position.distanceTo(camera.position);
-    if (distanceToCamera > 30) return;
-
-    // Breathing animation - faster for higher salience
-    const pulseSpeed = 0.5 + memory.salience * 1.5;
-    const pulse = Math.sin(state.clock.elapsedTime * pulseSpeed) * 0.08;
-    meshRef.current.scale.setScalar(size * (1 + pulse * glowIntensity));
-
-    if (glowRef.current) {
-      // Glow pulsing
-      const glowPulse = Math.sin(state.clock.elapsedTime * 0.8) * 0.3 + 0.7;
-      glowRef.current.scale.setScalar(size * 1.8 * (1 + glowPulse * 0.15));
-      (glowRef.current.material as THREE.MeshBasicMaterial).opacity =
-        glowIntensity * 0.3 * glowPulse;
-    }
-
-    // Update emissive intensity on hover
-    if (hovered) {
-      (meshRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity =
-        glowIntensity * 1.5;
-    }
+    // Update emissive intensity on hover for highlight effect
+    (meshRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = hovered ? 0.8 : 0.3;
   });
 
   return (
     <group position={position}>
-      {/* Outer glow - using shared geometry, scaled */}
-      <mesh ref={glowRef} geometry={GLOW_GEOMETRY} material={glowMaterial} scale={size * 1.8} />
-
-      {/* Main node - using shared geometry, scaled */}
+      {/* Main node - solid colored sphere */}
       <mesh
         ref={meshRef}
         geometry={NODE_GEOMETRY}
@@ -138,7 +168,12 @@ function MemoryNodeInner({
       {/* Selection ring - only rendered when selected */}
       {isSelected && (
         <mesh geometry={RING_GEOMETRY} rotation={[Math.PI / 2, 0, 0]} scale={size + 0.15}>
-          <meshBasicMaterial color="#ffffff" transparent opacity={0.9} side={THREE.DoubleSide} />
+          <meshBasicMaterial
+            color="#ffffff"
+            transparent
+            opacity={0.9}
+            side={THREE.DoubleSide}
+          />
         </mesh>
       )}
 
@@ -156,13 +191,37 @@ function MemoryNodeInner({
             <div className="flex items-center gap-2 mt-1 text-xs">
               <span
                 className="px-1.5 py-0.5 rounded"
-                style={{ backgroundColor: baseColor + '30', color: baseColor }}
+                style={{ backgroundColor: categoryColor + '30', color: categoryColor }}
               >
                 {memory.category}
               </span>
               <span className="text-slate-400">
                 {(memory.salience * 100).toFixed(0)}%
               </span>
+              {colorMode === 'health' && (
+                <span
+                  className="px-1.5 py-0.5 rounded"
+                  style={{ backgroundColor: healthColor + '30', color: healthColor }}
+                >
+                  {memory.salience * decayFactor > 0.6 ? 'Healthy' : memory.salience * decayFactor > 0.35 ? 'Moderate' : 'At Risk'}
+                </span>
+              )}
+              {colorMode === 'age' && (
+                <span
+                  className="px-1.5 py-0.5 rounded"
+                  style={{ backgroundColor: ageColor + '30', color: ageColor }}
+                >
+                  {formatAge(memory.createdAt)}
+                </span>
+              )}
+              {colorMode === 'holographic' && (
+                <span
+                  className="px-1.5 py-0.5 rounded"
+                  style={{ backgroundColor: holographicColor + '30', color: holographicColor }}
+                >
+                  {memory.salience > 0.7 ? 'High' : memory.salience > 0.4 ? 'Medium' : 'Low'}
+                </span>
+              )}
             </div>
           </div>
         </Html>
@@ -178,6 +237,7 @@ export const MemoryNode = memo(MemoryNodeInner, (prev, next) => {
     prev.memory.salience === next.memory.salience &&
     prev.memory.category === next.memory.category &&
     prev.isSelected === next.isSelected &&
+    prev.colorMode === next.colorMode &&
     prev.position[0] === next.position[0] &&
     prev.position[1] === next.position[1] &&
     prev.position[2] === next.position[2]
