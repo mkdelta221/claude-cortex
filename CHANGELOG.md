@@ -2,6 +2,61 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-01-27
+
+### Added
+- Jest test infrastructure with 31 passing tests
+- Test coverage for salience, decay, similarity, and memory types
+- npm scripts: `test`, `test:watch`, `test:coverage`, `audit:security`
+- React error boundary for dashboard crash handling
+- `.npmignore` for cleaner npm package
+
+### Fixed
+- npm security vulnerability (hono package)
+- Type safety in embeddings (replaced `any` with proper interface)
+- Three.js memory leaks in BrainMesh (use refs for cleanup)
+- WebSocket dependency array causing reconnection loops
+- Type-safe material casting in SynapseNodes
+
+## [1.2.1] - 2026-01-27
+
+### Added
+- Ko-fi support link in README
+- GitHub sponsor button via FUNDING.yml
+
+## [1.2.0] - 2026-01-27
+
+### Added
+- Dashboard control panel (pause/resume memory creation, trigger consolidation)
+- Debug tools panel with query tester, activity log, relationship graph, SQL console
+- Control API endpoints for pause/resume/consolidate
+- Chip visualization components (alternative view)
+- Category labels for brain regions
+
+## [1.1.1] - 2026-01-27
+
+### Added
+- Proactive memory instructions in SessionStart hook
+- Reminds Claude to use `remember` immediately for decisions, bug fixes, learnings
+
+### Fixed
+- React duplicate key error in brain visualization
+- Added defensive deduplication for memory nodes
+
+## [1.1.0] - 2026-01-27
+
+### Changed
+- Clean neural network design for dashboard visualization
+- Ghost wireframe brain outline (faint gray, no animation)
+- Gray neural connections with bright white signal pulses
+- Larger solid-colored memory nodes (no transparency/glow)
+- Simplified UI overlay (just memory count)
+
+### Removed
+- Stars background, colored brain regions
+- Synapse endpoint bulbs, connection count badge
+- Neural activity indicator, holographic color mode
+
 ## [1.0.0] - 2026-01-27
 
 ### Added
