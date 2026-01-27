@@ -1,0 +1,31 @@
+# Source files (dist is the published build)
+src/
+*.ts
+!*.d.ts
+
+# Tests
+__tests__/
+*.test.ts
+*.spec.ts
+jest.config.js
+coverage/
+
+# Documentation (except README)
+docs/
+*.md
+!README.md
+
+# Development files
+.github/
+.vscode/
+.idea/
+.claude/
+
+# Config files
+tsconfig.json
+.gitignore
+.env*
+
+# Temporary files
+*.log
+.DS_Store

@@ -13,7 +13,11 @@
     "dev": "tsx src/index.ts",
     "dev:api": "tsx src/index.ts --mode api",
     "dev:dashboard": "tsx src/index.ts --dashboard",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "audit:security": "npm audit --audit-level=moderate"
   },
   "keywords": [
     "claude",
@@ -48,8 +52,11 @@
     "@types/better-sqlite3": "^7.6.11",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.0.0",
     "@types/ws": "^8.5.13",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   },

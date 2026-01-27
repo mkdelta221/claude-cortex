@@ -4,15 +4,28 @@ import { pipeline, env } from '@xenova/transformers';
 env.allowRemoteModels = true;
 env.allowLocalModels = true;
 
-let embeddingPipeline: any = null;
+/**
+ * Type for the embedding pipeline function returned by transformers.js
+ * The pipeline extracts feature embeddings from text
+ */
+interface EmbeddingOutput {
+  data: ArrayLike<number>;
+}
+
+type EmbeddingPipeline = (
+  text: string,
+  options: { pooling: string; normalize: boolean }
+) => Promise<EmbeddingOutput>;
+
+let embeddingPipeline: EmbeddingPipeline | null = null;
 let isLoading = false;
-let loadPromise: Promise<any> | null = null;
+let loadPromise: Promise<EmbeddingPipeline> | null = null;
 
 /**
  * Lazy-load the embedding model
  * Model: all-MiniLM-L6-v2 (22MB, 384 dimensions)
  */
-async function getEmbeddingPipeline() {
+async function getEmbeddingPipeline(): Promise<EmbeddingPipeline> {
   if (embeddingPipeline) return embeddingPipeline;
 
   if (isLoading && loadPromise) {
@@ -20,7 +33,8 @@ async function getEmbeddingPipeline() {
   }
 
   isLoading = true;
-  loadPromise = pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+  // Cast the pipeline to our typed interface
+  loadPromise = pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2') as Promise<EmbeddingPipeline>;
 
   try {
     embeddingPipeline = await loadPromise;

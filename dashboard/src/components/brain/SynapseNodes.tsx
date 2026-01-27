@@ -63,23 +63,29 @@ export function SynapseNode({
     const scale = size * (1 + pulse * 0.3 * activity);
     meshRef.current.scale.setScalar(scale);
 
+    // Helper to safely update material opacity
+    const updateOpacity = (mesh: THREE.Mesh | null, opacity: number) => {
+      if (!mesh) return;
+      const mat = mesh.material;
+      if (mat && 'opacity' in mat && typeof mat.opacity === 'number') {
+        mat.opacity = opacity;
+      }
+    };
+
     // Core opacity
-    (meshRef.current.material as THREE.MeshBasicMaterial).opacity =
-      0.7 + pulse * 0.3;
+    updateOpacity(meshRef.current, 0.7 + pulse * 0.3);
 
     // Inner glow
     if (glowRef.current) {
       glowRef.current.scale.setScalar(scale * 2);
-      (glowRef.current.material as THREE.MeshBasicMaterial).opacity =
-        (0.3 + pulse * 0.2) * activity;
+      updateOpacity(glowRef.current, (0.3 + pulse * 0.2) * activity);
     }
 
     // Outer glow (slower pulse)
     if (outerGlowRef.current) {
       const outerPulse = Math.sin(time * pulseSpeed * 0.5) * 0.5 + 0.5;
       outerGlowRef.current.scale.setScalar(scale * 3.5 * (1 + outerPulse * 0.2));
-      (outerGlowRef.current.material as THREE.MeshBasicMaterial).opacity =
-        (0.1 + outerPulse * 0.1) * activity;
+      updateOpacity(outerGlowRef.current, (0.1 + outerPulse * 0.1) * activity);
     }
   });
 

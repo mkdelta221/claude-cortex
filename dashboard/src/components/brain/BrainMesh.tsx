@@ -6,7 +6,7 @@
  * Uses simplex noise to create organic cortex-like surface folds
  */
 
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { fbm3D, ridged3D } from '@/lib/simplex-noise';
 
@@ -85,28 +85,43 @@ export function BrainMesh({
   opacity = 0.05,
   showWireframe = true,
 }: BrainMeshProps) {
+  // Use refs to track resources for proper cleanup
+  const geometryRef = useRef<THREE.BufferGeometry | null>(null);
+  const materialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+
   // Create geometry once
-  const brainGeometry = useMemo(() => createBrainGeometry(), []);
+  const brainGeometry = useMemo(() => {
+    const geo = createBrainGeometry();
+    geometryRef.current = geo;
+    return geo;
+  }, []);
 
   // Ghost wireframe material - very faint gray
-  const wireframeMaterial = useMemo(
-    () =>
-      new THREE.MeshBasicMaterial({
-        color: '#333333',
-        wireframe: true,
-        transparent: true,
-        opacity: opacity,
-      }),
-    [opacity]
-  );
+  const wireframeMaterial = useMemo(() => {
+    const mat = new THREE.MeshBasicMaterial({
+      color: '#333333',
+      wireframe: true,
+      transparent: true,
+      opacity: opacity,
+    });
+    materialRef.current = mat;
+    return mat;
+  }, [opacity]);
 
   // Cleanup on unmount to prevent GPU memory leaks
+  // Use refs to ensure we always dispose the actual resources
   useEffect(() => {
     return () => {
-      brainGeometry.dispose();
-      wireframeMaterial.dispose();
+      if (geometryRef.current) {
+        geometryRef.current.dispose();
+        geometryRef.current = null;
+      }
+      if (materialRef.current) {
+        materialRef.current.dispose();
+        materialRef.current = null;
+      }
     };
-  }, [brainGeometry, wireframeMaterial]);
+  }, []);
 
   // Only render wireframe - no solid surface, no core, no animation
   if (!showWireframe) return null;

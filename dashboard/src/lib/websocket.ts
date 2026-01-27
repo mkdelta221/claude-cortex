@@ -59,6 +59,13 @@ export function useMemoryWebSocket(options: UseMemoryWebSocketOptions = {}) {
     timestamp: string;
   } | null>(null);
 
+  // Use ref for onMessage to avoid recreating connect callback when callback changes
+  // This prevents WebSocket reconnections on every render
+  const onMessageRef = useRef(onMessage);
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
+
   const connect = useCallback(() => {
     if (!enabled || wsRef.current?.readyState === WebSocket.OPEN) return;
 
@@ -89,8 +96,8 @@ export function useMemoryWebSocket(options: UseMemoryWebSocketOptions = {}) {
             timestamp: message.timestamp || new Date().toISOString(),
           });
 
-          // Notify external handler
-          onMessage?.(message);
+          // Notify external handler (use ref to avoid stale closure)
+          onMessageRef.current?.(message);
 
           // Invalidate relevant queries based on event type
           switch (message.type) {
@@ -181,7 +188,7 @@ export function useMemoryWebSocket(options: UseMemoryWebSocketOptions = {}) {
     } catch (err) {
       console.error('[WebSocket] Failed to connect:', err);
     }
-  }, [enabled, queryClient, onMessage]);
+  }, [enabled, queryClient]); // onMessage accessed via ref to prevent reconnection loops
 
   // Connect on mount
   useEffect(() => {
