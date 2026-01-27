@@ -50,14 +50,14 @@ export function createServer(dbPath?: string): McpServer {
   initProjectContext();
   const projectInfo = getProjectContextInfo();
   if (projectInfo.project) {
-    console.error(`[claude-memory] Project: "${projectInfo.project}" (from ${projectInfo.source})`);
+    console.error(`[claude-cortex] Project: "${projectInfo.project}" (from ${projectInfo.source})`);
   } else {
-    console.error('[claude-memory] Project: global scope');
+    console.error('[claude-cortex] Project: global scope');
   }
 
   // Create MCP server
   const server = new McpServer({
-    name: 'claude-memory',
+    name: 'claude-cortex',
     version: '1.0.0',
   });
 
@@ -603,15 +603,15 @@ but you can use this tool to check for new contradictions at any time.`,
   // Run initial consolidation on startup
   try {
     const startupResult = consolidate();
-    console.error(`[claude-memory] Startup consolidation: ${startupResult.consolidated} promoted, ${startupResult.deleted} deleted`);
+    console.error(`[claude-cortex] Startup consolidation: ${startupResult.consolidated} promoted, ${startupResult.deleted} deleted`);
   } catch (e) {
-    console.error('[claude-memory] Startup consolidation failed:', e);
+    console.error('[claude-cortex] Startup consolidation failed:', e);
   }
 
   // Check database size on startup
   const sizeInfo = checkDatabaseSize();
   if (sizeInfo.warning || sizeInfo.blocked) {
-    console.error(`[claude-memory] ${sizeInfo.message}`);
+    console.error(`[claude-cortex] ${sizeInfo.message}`);
   }
 
   // Schedule periodic consolidation every 4 hours
@@ -619,9 +619,9 @@ but you can use this tool to check for new contradictions at any time.`,
   setInterval(() => {
     try {
       const result = fullCleanup();
-      console.error(`[claude-memory] Scheduled cleanup: ${result.consolidation.consolidated} promoted, ${result.consolidation.deleted} deleted, ${result.merged} merged, vacuumed: ${result.vacuumed}`);
+      console.error(`[claude-cortex] Scheduled cleanup: ${result.consolidation.consolidated} promoted, ${result.consolidation.deleted} deleted, ${result.merged} merged, vacuumed: ${result.vacuumed}`);
     } catch (e) {
-      console.error('[claude-memory] Scheduled cleanup failed:', e);
+      console.error('[claude-cortex] Scheduled cleanup failed:', e);
     }
   }, CONSOLIDATION_INTERVAL);
 

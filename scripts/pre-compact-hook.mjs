@@ -16,9 +16,21 @@ import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
-// Database path (same as main memory system)
-const DB_DIR = join(homedir(), '.claude-memory');
-const DB_PATH = join(DB_DIR, 'memories.db');
+// Database paths (with legacy fallback)
+const NEW_DB_DIR = join(homedir(), '.claude-cortex');
+const LEGACY_DB_DIR = join(homedir(), '.claude-memory');
+
+// Auto-detect: use new path if it exists, or if legacy doesn't exist (new install)
+function getDbPath() {
+  const newPath = join(NEW_DB_DIR, 'memories.db');
+  const legacyPath = join(LEGACY_DB_DIR, 'memories.db');
+  if (existsSync(newPath) || !existsSync(legacyPath)) {
+    return { dir: NEW_DB_DIR, path: newPath };
+  }
+  return { dir: LEGACY_DB_DIR, path: legacyPath };
+}
+
+const { dir: DB_DIR, path: DB_PATH } = getDbPath();
 
 // Memory limits (should match src/memory/types.ts DEFAULT_CONFIG)
 const MAX_SHORT_TERM_MEMORIES = 100;
@@ -580,7 +592,7 @@ process.stdin.on('end', () => {
     // Create session marker
     createSessionMarker(db, trigger, project, autoExtractedCount);
 
-    console.error(`[claude-memory] Pre-compact complete: ${autoExtractedCount} memories auto-extracted`);
+    console.error(`[claude-cortex] Pre-compact complete: ${autoExtractedCount} memories auto-extracted`);
 
     outputReminder(autoExtractedCount, dynamicThreshold);
 

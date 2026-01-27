@@ -79,7 +79,7 @@ export function activateMemory(memoryId: number): void {
     }
   } catch (e) {
     // Don't fail memory access if spreading fails
-    console.error('[claude-memory] Activation spreading failed:', e);
+    console.error('[claude-cortex] Activation spreading failed:', e);
   }
 }
 

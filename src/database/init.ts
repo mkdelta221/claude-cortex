@@ -30,14 +30,33 @@ function expandPath(path: string): string {
 }
 
 /**
+ * Get the database path with legacy fallback
+ * - New installs use ~/.claude-cortex/
+ * - Existing users with ~/.claude-memory/ continue to work
+ */
+function getDefaultDbPath(): string {
+  const newPath = join(homedir(), '.claude-cortex', 'memories.db');
+  const legacyPath = join(homedir(), '.claude-memory', 'memories.db');
+
+  // Prefer new path if it exists, or if neither exists (new install)
+  if (existsSync(newPath) || !existsSync(legacyPath)) {
+    return newPath;
+  }
+  // Fall back to legacy path for existing users
+  return legacyPath;
+}
+
+/**
  * Initialize the database connection
  */
-export function initDatabase(dbPath: string = '~/.claude-memory/memories.db'): Database.Database {
+export function initDatabase(dbPath?: string): Database.Database {
+  // Use auto-detected path if not specified
+  const resolvedPath = dbPath || getDefaultDbPath();
   if (db) {
     return db;
   }
 
-  const expandedPath = expandPath(dbPath);
+  const expandedPath = expandPath(resolvedPath);
   const dir = dirname(expandedPath);
 
   // Create directory if it doesn't exist

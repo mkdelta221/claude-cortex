@@ -1,5 +1,5 @@
 {
-  "name": "claude-memory",
+  "name": "claude-cortex",
   "version": "1.0.0",
   "description": "Brain-like memory system for Claude Code - solves context compaction and memory persistence",
   "main": "dist/index.js",
@@ -40,7 +40,7 @@
     "typescript": "^5.6.0"
   },
   "bin": {
-    "claude-memory": "./dist/index.js"
+    "claude-cortex": "./dist/index.js"
   },
   "files": [
     "dist"

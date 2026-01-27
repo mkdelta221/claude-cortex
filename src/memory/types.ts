@@ -106,7 +106,7 @@ export interface MemoryConfig {
 }
 
 export const DEFAULT_CONFIG: MemoryConfig = {
-  dbPath: '~/.claude-memory/memories.db',
+  dbPath: '~/.claude-cortex/memories.db', // Note: actual path auto-detected with legacy fallback
   decayRate: 0.995,
   reinforcementFactor: 1.2,
   salienceThreshold: 0.2, // Lowered from 0.3 to match reduced base salience (0.25)

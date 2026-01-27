@@ -1,4 +1,4 @@
-# Claude Memory 🧠
+# Claude Cortex 🧠
 
 **Brain-like memory system for Claude Code** - Solves the context compaction and memory persistence problems.
 
@@ -26,7 +26,7 @@ Claude Memory works like a human brain:
 ### 1. Install
 
 ```bash
-cd claude-memory
+cd claude-cortex
 npm install
 npm run build
 ```
@@ -211,7 +211,7 @@ Claude: Let me check my memory.
 
 ### Database Location
 
-Default: `~/.claude-memory/memories.db`
+Default: `~/.claude-cortex/memories.db` (with fallback to legacy `~/.claude-memory/` for existing users)
 
 Custom location:
 ```bash

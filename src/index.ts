@@ -7,11 +7,11 @@
  * solving the context compaction and session persistence problems.
  *
  * Usage:
- *   npx claude-memory                         # Start MCP server (default)
- *   npx claude-memory --mode mcp              # Start MCP server
- *   npx claude-memory --mode api              # Start visualization API server
- *   npx claude-memory --mode both             # Start both servers
- *   npx claude-memory --db /path/to.db        # Custom database path
+ *   npx claude-cortex                         # Start MCP server (default)
+ *   npx claude-cortex --mode mcp              # Start MCP server
+ *   npx claude-cortex --mode api              # Start visualization API server
+ *   npx claude-cortex --mode both             # Start both servers
+ *   npx claude-cortex --db /path/to.db        # Custom database path
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -93,6 +93,6 @@ async function main() {
 // Run
 main().catch((error) => {
   // Log to stderr to avoid corrupting MCP protocol
-  console.error('Failed to start claude-memory server:', error);
+  console.error('Failed to start claude-cortex server:', error);
   process.exit(1);
 });

@@ -207,7 +207,7 @@ export function addMemory(
     }
   } catch (e) {
     // Don't fail memory creation if linking fails
-    console.error('[claude-memory] Auto-link failed:', e);
+    console.error('[claude-cortex] Auto-link failed:', e);
   }
 
   // SEMANTIC SEARCH: Generate embedding asynchronously (don't block INSERT)
@@ -218,11 +218,11 @@ export function addMemory(
         db.prepare('UPDATE memories SET embedding = ? WHERE id = ?')
           .run(Buffer.from(embedding.buffer), memoryId);
       } catch (e) {
-        console.error('[claude-memory] Failed to store embedding:', e);
+        console.error('[claude-cortex] Failed to store embedding:', e);
       }
     })
     .catch(e => {
-      console.error('[claude-memory] Failed to generate embedding:', e);
+      console.error('[claude-cortex] Failed to generate embedding:', e);
     });
 
   // Anti-bloat: Check if limits exceeded and trigger async cleanup
@@ -395,7 +395,7 @@ export function accessMemory(
     }
   } catch (e) {
     // Don't fail memory access if link strengthening fails
-    console.error('[claude-memory] Link strengthening failed:', e);
+    console.error('[claude-cortex] Link strengthening failed:', e);
   }
 
   // ORGANIC FEATURE: Spreading Activation (Phase 2)
@@ -737,7 +737,7 @@ export async function searchMemories(
       }
     } catch (e) {
       // Vector search unavailable - fall back to FTS only
-      console.log('[claude-memory] Vector search unavailable, using FTS only');
+      console.log('[claude-cortex] Vector search unavailable, using FTS only');
     }
   }
 

@@ -97,7 +97,7 @@ export function consolidate(
       contradictionsFound = contradictions.length;
       contradictionsLinked = linkContradictions(contradictions);
     } catch (e) {
-      console.error('[claude-memory] Contradiction detection failed:', e);
+      console.error('[claude-cortex] Contradiction detection failed:', e);
     }
 
     return { consolidated, decayed, deleted, contradictionsFound, contradictionsLinked };

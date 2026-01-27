@@ -168,7 +168,7 @@ User: "What database are we using?"
 ## Files Structure
 
 ```
-claude-memory/
+claude-cortex/
 ├── src/
 │   ├── index.ts           # MCP server entry point
 │   ├── server.ts          # MCP server setup

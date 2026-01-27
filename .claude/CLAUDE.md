@@ -1,4 +1,4 @@
-# Claude Memory - Project Instructions
+# Claude Cortex - Project Instructions
 
 ## What This Is
 An MCP server that gives Claude Code brain-like memory. This project IS the memory system, so be careful not to break it while working on it.
@@ -43,7 +43,7 @@ cd dashboard && npm run dev
 | `dashboard/` | 3D brain visualization (Next.js) |
 
 ## Database Location
-`~/.claude-memory/memories.db` (SQLite with FTS5)
+`~/.claude-cortex/memories.db` (SQLite with FTS5, with fallback to legacy `~/.claude-memory/`)
 
 ## Recent Improvements
 
