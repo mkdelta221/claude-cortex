@@ -176,22 +176,37 @@ process.stdin.on('end', () => {
 
     db.close();
 
+    // Proactive memory instructions
+    const proactiveInstructions = `
+## IMPORTANT: Proactive Memory Use
+
+You have access to a persistent memory system. Use it proactively:
+
+**ALWAYS use \`remember\` immediately when:**
+- Making architecture/design decisions
+- Fixing bugs (capture the root cause and solution)
+- Learning something new about the codebase
+- User states a preference
+- Completing significant features
+
+**Don't wait** - call \`remember\` right after the event, not at the end of the session.
+`;
+
     if (context) {
       // Output context to stdout - this will be shown to Claude
       console.log(`
-🧠 CLAUDE MEMORY - Auto-loaded context for project "${project}"
+🧠 CLAUDE CORTEX - Project "${project}"
 
 ${context}
-
----
-Use \`recall\` to search for specific memories, or \`remember\` to save new ones.
+${proactiveInstructions}
 `);
       console.error(`[claude-cortex] Session start: loaded ${memories.length} memories for "${project}"`);
     } else {
       console.log(`
-🧠 CLAUDE MEMORY - No stored context for project "${project}"
+🧠 CLAUDE CORTEX - New project "${project}"
 
-This appears to be a new project. Use \`remember\` to save important information.
+No stored memories yet for this project.
+${proactiveInstructions}
 `);
       console.error(`[claude-cortex] Session start: no memories found for "${project}"`);
     }
