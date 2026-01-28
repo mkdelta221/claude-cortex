@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-01-28
+
+### Added
+- **Cross-process event IPC** - MCP tool events (remember, recall, forget) now appear in dashboard Activity log
+- Events persisted to SQLite `events` table for cross-process communication
+- API server polls for new events every 500ms and broadcasts via WebSocket
+- Automatic cleanup of processed events after 24 hours
+
 ## [1.4.2] - 2026-01-28
 
 ### Fixed
