@@ -32,7 +32,15 @@ import { calculateDecayedScore } from '../memory/decay.js';
 import { getActivationStats, getActiveMemories } from '../memory/activation.js';
 import { detectContradictions, getContradictionsFor } from '../memory/contradiction.js';
 import { enrichMemory } from '../memory/store.js';
-import { memoryEvents, MemoryEvent, emitDecayTick, emitConsolidation } from './events.js';
+import {
+  memoryEvents,
+  MemoryEvent,
+  emitDecayTick,
+  emitConsolidation,
+  getUnprocessedEvents,
+  markEventsProcessed,
+  cleanupOldEvents,
+} from './events.js';
 import { BrainWorker } from '../worker/brain-worker.js';
 import { isPaused, pause, resume, getControlStatus } from './control.js';
 import { getCurrentVersion, checkForUpdates, performUpdate, scheduleRestart } from './version.js';
@@ -867,6 +875,40 @@ export function startVisualizationServer(dbPath?: string): void {
   }, 30000);
 
   // ============================================
+  // CROSS-PROCESS EVENT POLLING (IPC)
+  // ============================================
+
+  // Poll database for events from MCP process every 500ms
+  const eventPollInterval = setInterval(() => {
+    try {
+      const events = getUnprocessedEvents(50);
+      if (events.length > 0) {
+        const ids: number[] = [];
+        for (const event of events) {
+          broadcast({ type: event.type, data: event.data, timestamp: event.timestamp });
+          ids.push(event.id);
+        }
+        markEventsProcessed(ids);
+        console.log(`[Events] Processed ${events.length} cross-process events`);
+      }
+    } catch (error) {
+      // Don't spam logs on transient errors
+      if (Math.random() < 0.1) {
+        console.error('[Events] Event polling error:', error);
+      }
+    }
+  }, 500);
+
+  // Cleanup old processed events every hour
+  const cleanupInterval = setInterval(() => {
+    try {
+      cleanupOldEvents();
+    } catch (error) {
+      console.error('[Events] Cleanup error:', error);
+    }
+  }, 60 * 60 * 1000);
+
+  // ============================================
   // START SERVER
   // ============================================
 
@@ -879,6 +921,10 @@ export function startVisualizationServer(dbPath?: string): void {
 
     // Stop the brain worker
     brainWorker.stop();
+
+    // Clear polling intervals
+    clearInterval(eventPollInterval);
+    clearInterval(cleanupInterval);
 
     // Close WebSocket connections
     for (const client of clients) {
