@@ -195,34 +195,12 @@ export default function DashboardPage() {
             size="sm"
             onClick={() => setShowFilters(!showFilters)}
             className={`border-slate-600 text-slate-300 hover:text-white hover:bg-slate-700 ${showFilters ? 'bg-slate-700' : ''}`}
+            title="Filter memories by type and category"
           >
             Filters {(typeFilter || categoryFilter) && '•'}
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          {/* Quick Pause/Resume Toggle */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => isPaused ? resumeMutation.mutate() : pauseMutation.mutate()}
-            disabled={pauseMutation.isPending || resumeMutation.isPending}
-            className={`${
-              isPaused
-                ? 'border-orange-600 bg-orange-600/20 text-orange-300 hover:bg-orange-600/30'
-                : 'border-slate-600 text-slate-300 hover:text-white hover:bg-slate-700'
-            }`}
-          >
-            {isPaused ? '▶ Resume' : '⏸ Pause'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleConsolidate}
-            disabled={consolidateMutation.isPending}
-            className="border-slate-600 text-slate-300 hover:text-white hover:bg-slate-700"
-          >
-            {consolidateMutation.isPending ? '...' : '🔄'}
-          </Button>
           <div className="flex items-center gap-2 text-xs text-slate-400 px-2">
             <span
               className={`w-2 h-2 rounded-full ${isPaused ? 'bg-orange-500 animate-pulse' : (isConnected ? 'bg-green-500' : 'bg-yellow-500')}`}

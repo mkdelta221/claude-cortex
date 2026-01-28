@@ -70,17 +70,18 @@ export function ControlPanel() {
         </div>
 
         {/* Control Buttons */}
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={handleTogglePause}
             disabled={isToggling}
-            className={`flex-1 ${
+            className={`text-xs ${
               isPaused
                 ? 'border-green-600 text-green-400 hover:bg-green-600/20 hover:text-green-300'
                 : 'border-orange-600 text-orange-400 hover:bg-orange-600/20 hover:text-orange-300'
             }`}
+            title={isPaused ? 'Resume memory creation' : 'Pause memory creation'}
           >
             {isToggling ? '...' : isPaused ? '▶ Resume' : '⏸ Pause'}
           </Button>
@@ -90,9 +91,10 @@ export function ControlPanel() {
             size="sm"
             onClick={handleConsolidate}
             disabled={consolidateMutation.isPending}
-            className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-600/20"
+            className="text-xs border-slate-600 text-slate-300 hover:bg-slate-600/20"
+            title="Consolidate memories (promote STM to LTM)"
           >
-            {consolidateMutation.isPending ? '...' : '🔄 Consolidate'}
+            {consolidateMutation.isPending ? '...' : '🔄 Sync'}
           </Button>
         </div>
       </div>

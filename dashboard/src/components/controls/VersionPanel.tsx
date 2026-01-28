@@ -149,6 +149,7 @@ export function VersionPanel() {
           onClick={handleCheckUpdates}
           disabled={checkMutation.isPending || updateState === 'updating'}
           className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-600/20"
+          title="Check npm for newer versions"
         >
           {checkMutation.isPending || updateState === 'checking' ? '...' : 'Check Updates'}
         </Button>
@@ -160,6 +161,7 @@ export function VersionPanel() {
             onClick={handleUpdate}
             disabled={updateState === 'updating' || updateState === 'restarting'}
             className="flex-1 border-green-600 text-green-400 hover:bg-green-600/20 hover:text-green-300"
+            title="Update to latest version via npm"
           >
             {updateState === 'updating' ? '...' : 'Update'}
           </Button>
@@ -172,6 +174,7 @@ export function VersionPanel() {
             onClick={handleRestart}
             disabled={updateState === 'restarting'}
             className="flex-1 border-orange-600 text-orange-400 hover:bg-orange-600/20 hover:text-orange-300"
+            title="Restart the server to apply updates"
           >
             {updateState === 'restarting' ? '...' : 'Restart'}
           </Button>

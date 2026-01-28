@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.2] - 2026-01-28
+
+### Fixed
+- Removed duplicate Pause/Sync buttons from dashboard header (now only in sidebar)
+- Consolidation events now properly emit to Activity log
+- Added tooltips to all dashboard buttons for better UX
+
 ## [1.4.1] - 2026-01-28
 
 ### Fixed

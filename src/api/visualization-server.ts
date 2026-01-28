@@ -32,7 +32,7 @@ import { calculateDecayedScore } from '../memory/decay.js';
 import { getActivationStats, getActiveMemories } from '../memory/activation.js';
 import { detectContradictions, getContradictionsFor } from '../memory/contradiction.js';
 import { enrichMemory } from '../memory/store.js';
-import { memoryEvents, MemoryEvent, emitDecayTick } from './events.js';
+import { memoryEvents, MemoryEvent, emitDecayTick, emitConsolidation } from './events.js';
 import { BrainWorker } from '../worker/brain-worker.js';
 import { isPaused, pause, resume, getControlStatus } from './control.js';
 import { getCurrentVersion, checkForUpdates, performUpdate, scheduleRestart } from './version.js';
@@ -628,6 +628,8 @@ export function startVisualizationServer(dbPath?: string): void {
   app.post('/api/consolidate', (_req: Request, res: Response) => {
     try {
       const result = consolidate();
+      // Emit event for Activity log
+      emitConsolidation(result);
       res.json({
         success: true,
         ...result,
