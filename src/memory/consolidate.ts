@@ -37,6 +37,7 @@ import {
   detectContradictions,
   linkContradictions,
 } from './contradiction.js';
+import { jaccardSimilarity } from './similarity.js';
 
 /**
  * Run full consolidation process
@@ -212,56 +213,137 @@ export function enforceMemoryLimits(config: MemoryConfig = DEFAULT_CONFIG): numb
 }
 
 /**
- * Find and merge similar memories
- * Reduces redundancy while preserving important information
+ * Find and merge similar short-term memories into coherent long-term entries.
+ * Groups memories by project|category, then clusters by Jaccard similarity
+ * on content (0.6 weight) + title (0.4 weight).
+ * Returns count of deleted (merged) memories.
  */
 export function mergeSimilarMemories(
   project?: string,
-  similarityThreshold: number = 0.8
+  similarityThreshold: number = 0.25
 ): number {
-  // Wrap in transaction for atomic merge operations
   return withTransaction(() => {
     const db = getDatabase();
-    let merged = 0;
+    let deleted = 0;
 
-    // Get all memories (optionally filtered by project)
-    let sql = 'SELECT * FROM memories';
+    // Step 1: Get all short-term memories, optionally filtered by project
+    let sql = "SELECT * FROM memories WHERE type = 'short_term'";
     const params: unknown[] = [];
     if (project) {
-      sql += ' WHERE project = ?';
+      sql += ' AND project = ?';
       params.push(project);
     }
     sql += ' ORDER BY created_at ASC';
 
     const memories = db.prepare(sql).all(...params) as Record<string, unknown>[];
 
-    // Simple similarity check based on title and first 100 chars of content
-    const seen = new Map<string, number>(); // key -> id of primary memory
+    // Step 2: Group by project|category
+    const groups = new Map<string, Record<string, unknown>[]>();
+    for (const mem of memories) {
+      const key = `${mem.project || ''}|${mem.category || ''}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(mem);
+    }
 
-    for (const row of memories) {
-      const key = `${(row.title as string).toLowerCase().trim()}|${(row.content as string).slice(0, 100).toLowerCase()}`;
+    // Step 3: For each group with 2+ members, find clusters
+    for (const [, group] of groups) {
+      if (group.length < 2) continue;
 
-      if (seen.has(key)) {
-        // This is a duplicate, merge into the primary
-        const primaryId = seen.get(key)!;
+      // Track which memories have been clustered
+      const clustered = new Set<number>();
 
-        // Boost the primary memory's salience
+      for (let i = 0; i < group.length; i++) {
+        if (clustered.has(i)) continue;
+
+        const cluster: number[] = [i]; // indices into group
+        const memA = group[i];
+
+        for (let j = i + 1; j < group.length; j++) {
+          if (clustered.has(j)) continue;
+
+          const memB = group[j];
+          const contentSim = jaccardSimilarity(
+            memA.content as string,
+            memB.content as string
+          );
+          const titleSim = jaccardSimilarity(
+            memA.title as string,
+            memB.title as string
+          );
+          const combinedSim = contentSim * 0.6 + titleSim * 0.4;
+
+          if (combinedSim >= similarityThreshold) {
+            cluster.push(j);
+          }
+        }
+
+        if (cluster.length < 2) continue;
+
+        // Mark all as clustered
+        for (const idx of cluster) clustered.add(idx);
+
+        // Step 4: Merge cluster
+        // Sort by salience desc, pick highest as base
+        const clusterMems = cluster.map(idx => group[idx]);
+        clusterMems.sort(
+          (a, b) => (b.salience as number) - (a.salience as number)
+        );
+
+        const base = clusterMems[0];
+        const others = clusterMems.slice(1);
+
+        // Merge content
+        const bulletPoints = others
+          .map(m => `- ${(m.title as string)}: ${(m.content as string)}`)
+          .join('\n');
+        const mergedContent = `${base.content as string}\n\nConsolidated context:\n${bulletPoints}`;
+
+        // Merge tags (union)
+        const allTags = new Set<string>();
+        for (const m of clusterMems) {
+          try {
+            const tags = JSON.parse((m.tags as string) || '[]') as string[];
+            for (const t of tags) allTags.add(t);
+          } catch {
+            // skip invalid tags
+          }
+        }
+
+        // Sum access counts
+        const totalAccessCount = clusterMems.reduce(
+          (sum, m) => sum + ((m.access_count as number) || 0),
+          0
+        );
+
+        // New salience: base + 0.1, capped at 1.0
+        const newSalience = Math.min(1.0, (base.salience as number) + 0.1);
+
+        // Update base memory
         db.prepare(`
           UPDATE memories
-          SET salience = MIN(1.0, salience + 0.1),
-              access_count = access_count + 1
+          SET type = 'long_term',
+              content = ?,
+              tags = ?,
+              salience = ?,
+              access_count = ?
           WHERE id = ?
-        `).run(primaryId);
+        `).run(
+          mergedContent,
+          JSON.stringify([...allTags]),
+          newSalience,
+          totalAccessCount,
+          base.id as number
+        );
 
-        // Delete the duplicate
-        deleteMemory(row.id as number);
-        merged++;
-      } else {
-        seen.set(key, row.id as number);
+        // Delete others
+        for (const other of others) {
+          deleteMemory(other.id as number);
+          deleted++;
+        }
       }
     }
 
-    return merged;
+    return deleted;
   });
 }
 
