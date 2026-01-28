@@ -92,7 +92,15 @@ Add to `~/.claude/settings.json` for automatic memory extraction before compacti
 
 This ensures important context is auto-saved before any compaction event.
 
-### 3. Use It
+### 4. Enable Proactive Memory (Recommended)
+
+```bash
+npx claude-cortex setup
+```
+
+This adds instructions to `~/.claude/CLAUDE.md` so Claude proactively uses memory tools in all projects. Safe to run multiple times (idempotent).
+
+### 5. Use It
 
 The memory system integrates seamlessly with Claude Code. Here are the key tools:
 
@@ -282,6 +290,7 @@ The dashboard provides a 3D brain visualization of your memories with real-time 
 ### Auto-Start on Login (Recommended)
 
 ```bash
+npx claude-cortex setup              # Configure Claude for proactive memory use
 npx claude-cortex service install    # Enable auto-start
 npx claude-cortex service uninstall  # Remove auto-start
 npx claude-cortex service status     # Check status
