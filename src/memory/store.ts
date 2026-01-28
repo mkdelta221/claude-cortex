@@ -37,6 +37,7 @@ import {
   emitMemoryAccessed,
   emitMemoryDeleted,
   emitMemoryUpdated,
+  persistEvent,
 } from '../api/events.js';
 import { generateEmbedding, cosineSimilarity } from '../embeddings/index.js';
 import { isPaused } from '../api/control.js';
@@ -211,8 +212,10 @@ export function addMemory(
 
   const memory = getMemoryById(result.lastInsertRowid as number)!;
 
-  // Emit event for real-time dashboard
+  // Emit event for real-time dashboard (in-process)
   emitMemoryCreated(memory);
+  // Persist event for cross-process IPC (MCP → Dashboard)
+  persistEvent('memory_created', { memory });
 
   // ORGANIC FEATURE: Auto-link to related memories
   // This builds the knowledge graph automatically as memories are created
@@ -329,8 +332,10 @@ export function updateMemory(
 
   const updatedMemory = getMemoryById(id)!;
 
-  // Emit event for real-time dashboard
+  // Emit event for real-time dashboard (in-process)
   emitMemoryUpdated(updatedMemory);
+  // Persist event for cross-process IPC (MCP → Dashboard)
+  persistEvent('memory_updated', { memory: updatedMemory });
 
   return updatedMemory;
 }
@@ -346,9 +351,11 @@ export function deleteMemory(id: number): boolean {
 
   const result = db.prepare('DELETE FROM memories WHERE id = ?').run(id);
 
-  // Emit event for real-time dashboard
+  // Emit event for real-time dashboard (in-process)
   if (result.changes > 0 && memory) {
     emitMemoryDeleted(id, memory.title);
+    // Persist event for cross-process IPC (MCP → Dashboard)
+    persistEvent('memory_deleted', { memoryId: id, title: memory.title });
   }
 
   return result.changes > 0;
@@ -378,8 +385,10 @@ export function accessMemory(
 
   const updatedMemory = getMemoryById(id)!;
 
-  // Emit event for real-time dashboard
+  // Emit event for real-time dashboard (in-process)
   emitMemoryAccessed(updatedMemory, newSalience);
+  // Persist event for cross-process IPC (MCP → Dashboard)
+  persistEvent('memory_accessed', { memoryId: id, memory: updatedMemory, newSalience });
 
   // ORGANIC FEATURE: Link strengthening on co-access
   // If memory A and B are both accessed within 5 minutes, strengthen their link
