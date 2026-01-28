@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-01-28
+
+### Fixed
+- README branding: changed "Claude Memory" references to "Claude Cortex"
+
 ## [1.3.0] - 2026-01-27
 
 ### Added
