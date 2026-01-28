@@ -34,7 +34,7 @@ const activationCache = new Map<number, ActivationEntry>();
 const DECAY_HALF_LIFE_MINUTES = 30; // Activation halves every 30 minutes
 const SPREAD_FACTOR = 0.5; // How much activation spreads (50% of link strength)
 const MAX_SPREAD_DEPTH = 1; // Only spread to direct neighbors (not neighbors of neighbors)
-const MAX_ACTIVATION_BOOST = 0.2; // Cap search boost at 20%
+const MAX_ACTIVATION_BOOST = 0.3; // Cap search boost at 30%
 
 /**
  * Activate a memory and spread activation to linked memories

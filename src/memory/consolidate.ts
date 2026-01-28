@@ -38,6 +38,7 @@ import {
   linkContradictions,
 } from './contradiction.js';
 import { jaccardSimilarity } from './similarity.js';
+import { pruneActivationCache } from './activation.js';
 
 /**
  * Run full consolidation process
@@ -108,6 +109,9 @@ export function consolidate(
     } catch (e) {
       console.error('[claude-cortex] Contradiction detection failed:', e);
     }
+
+    // Prune activation cache to prevent unbounded growth
+    pruneActivationCache();
 
     return { consolidated, decayed, deleted, contradictionsFound, contradictionsLinked, salienceEvolved };
   });

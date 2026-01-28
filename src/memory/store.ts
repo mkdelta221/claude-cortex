@@ -30,6 +30,7 @@ import {
 import {
   activateMemory as spreadActivation,
   getActivationBoost,
+  pruneActivationCache,
 } from './activation.js';
 import { jaccardSimilarity } from './similarity.js';
 import {
@@ -750,10 +751,15 @@ function vectorSearch(
  * Search memories using full-text search, vector similarity, and filters
  * Now uses hybrid search combining FTS5 keywords with semantic vector matching
  */
+let searchCount = 0;
+
 export async function searchMemories(
   options: SearchOptions,
   config: MemoryConfig = DEFAULT_CONFIG
 ): Promise<SearchResult[]> {
+  if (++searchCount % 100 === 0) {
+    pruneActivationCache();
+  }
   const db = getDatabase();
   const limit = options.limit || 20;
   const includeGlobal = options.includeGlobal ?? true;
@@ -869,10 +875,10 @@ export async function searchMemories(
 
     // Combined relevance score (adjusted weights to accommodate vector)
     const relevanceScore = (
-      ftsScore * 0.3 +           // Reduced from 0.35
+      ftsScore * 0.25 +          // Reduced from 0.3
       vectorBoost +              // New: 0-0.3 from vector similarity
-      decayedScore * 0.25 +      // Reduced from 0.35
-      calculatePriority(memory) * 0.1 +  // Reduced from 0.15
+      decayedScore * 0.2 +       // Reduced from 0.25
+      calculatePriority(memory) * 0.05 + // Reduced from 0.1
       recencyBoost + categoryBoost + linkBoost + tagBoost + activationBoost
     );
 
