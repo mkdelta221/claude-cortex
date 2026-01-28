@@ -87,6 +87,14 @@ export function consolidate(
     // Persist updated decay scores for efficient sorting
     updateDecayScores();
 
+    // Evolve salience based on structural importance
+    let salienceEvolved = 0;
+    try {
+      salienceEvolved = evolveSalience(db);
+    } catch (e) {
+      console.error('[claude-cortex] Salience evolution failed:', e);
+    }
+
     // ORGANIC FEATURE: Contradiction Detection (Phase 3)
     // Detect and link contradicting memories during consolidation
     let contradictionsFound = 0;
@@ -100,8 +108,54 @@ export function consolidate(
       console.error('[claude-cortex] Contradiction detection failed:', e);
     }
 
-    return { consolidated, decayed, deleted, contradictionsFound, contradictionsLinked };
+    return { consolidated, decayed, deleted, contradictionsFound, contradictionsLinked, salienceEvolved };
   });
+}
+
+/**
+ * Adjust salience based on structural importance (link count, contradiction status).
+ * Called during consolidation.
+ */
+function evolveSalience(db: any): number {
+  let updated = 0;
+
+  // Boost highly-linked memories (hub bonus)
+  const hubs = db.prepare(`
+    SELECT m.id, m.salience,
+      (SELECT COUNT(*) FROM memory_links WHERE source_id = m.id OR target_id = m.id) as link_count
+    FROM memories m
+    WHERE m.type IN ('long_term', 'episodic')
+  `).all() as { id: number; salience: number; link_count: number }[];
+
+  for (const hub of hubs) {
+    if (hub.link_count < 2) continue;
+    const linkBonus = Math.min(0.1, Math.log2(hub.link_count) * 0.03);
+    const newSalience = Math.min(1.0, hub.salience + linkBonus);
+    if (newSalience > hub.salience) {
+      db.prepare('UPDATE memories SET salience = ? WHERE id = ?').run(newSalience, hub.id);
+      updated++;
+    }
+  }
+
+  // Penalize contradicted memories slightly (both sides)
+  const contradicted = db.prepare(`
+    SELECT DISTINCT source_id, target_id
+    FROM memory_links
+    WHERE relationship = 'contradicts'
+  `).all() as { source_id: number; target_id: number }[];
+
+  for (const pair of contradicted) {
+    for (const id of [pair.source_id, pair.target_id]) {
+      const mem = db.prepare('SELECT salience FROM memories WHERE id = ?').get(id) as any;
+      if (mem && mem.salience > 0.3) {
+        db.prepare('UPDATE memories SET salience = ? WHERE id = ?')
+          .run(mem.salience - 0.02, id);
+        updated++;
+      }
+    }
+  }
+
+  return updated;
 }
 
 /**

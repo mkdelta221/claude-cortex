@@ -65,7 +65,7 @@ export function analyzeSalienceFactors(input: MemoryInput): SalienceFactors {
     isErrorResolution: detectKeywords(text, ERROR_KEYWORDS),
     isCodePattern: detectKeywords(text, PATTERN_KEYWORDS),
     isUserPreference: detectKeywords(text, PREFERENCE_KEYWORDS),
-    mentionCount: 1, // Will be updated by external context
+    mentionCount: countMentions(text),
     hasCodeReference: detectCodeReferences(input.content),
     emotionalMarkers: detectKeywords(text, EMOTIONAL_MARKERS),
   };
@@ -93,6 +93,22 @@ export function computeSalienceScore(factors: SalienceFactors): number {
 
   // Cap at 1.0
   return Math.min(1.0, score);
+}
+
+/**
+ * Count how many keyword mentions appear in the text
+ */
+function countMentions(text: string): number {
+  const allKeywords = [
+    ...ARCHITECTURE_KEYWORDS, ...ERROR_KEYWORDS,
+    ...PREFERENCE_KEYWORDS, ...PATTERN_KEYWORDS
+  ];
+  let count = 0;
+  const lower = text.toLowerCase();
+  for (const kw of allKeywords) {
+    if (lower.includes(kw)) count++;
+  }
+  return Math.max(1, count);
 }
 
 /**
