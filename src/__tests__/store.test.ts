@@ -6,6 +6,8 @@
 
 import { describe, it, expect, beforeAll } from '@jest/globals';
 import type { Memory, MemoryInput } from '../memory/types.js';
+import { jaccardSimilarity } from '../memory/similarity.js';
+import { cosineSimilarity } from '../embeddings/generator.js';
 
 describe('Memory Types', () => {
   describe('DEFAULT_CONFIG', () => {
@@ -424,5 +426,127 @@ describe('Content Truncation', () => {
     const longContent = 'x'.repeat(MAX_CONTENT_SIZE + 100);
 
     expect(longContent.length).toBeGreaterThan(MAX_CONTENT_SIZE);
+  });
+});
+
+describe('Semantic Linking', () => {
+  describe('cosineSimilarity for embedding-based linking', () => {
+
+    it('should return 1.0 for identical vectors', () => {
+      const a = new Float32Array([1, 2, 3]);
+      const b = new Float32Array([1, 2, 3]);
+      expect(cosineSimilarity(a, b)).toBeCloseTo(1.0, 5);
+    });
+
+    it('should return 0.0 for orthogonal vectors', () => {
+      const a = new Float32Array([1, 0, 0]);
+      const b = new Float32Array([0, 1, 0]);
+      expect(cosineSimilarity(a, b)).toBeCloseTo(0.0, 5);
+    });
+
+    it('should return high similarity for similar vectors', () => {
+      const a = new Float32Array([1, 2, 3]);
+      const b = new Float32Array([1.1, 2.1, 3.1]);
+      expect(cosineSimilarity(a, b)).toBeGreaterThan(0.99);
+    });
+  });
+
+  describe('jaccardSimilarity for FTS fallback linking', () => {
+    it('should link memories with similar content but different tags', () => {
+      // Two memories about the same topic (SQLite performance) but with different tags
+      const memoryA = 'SQLite database performance optimization using WAL mode and busy timeout';
+      const memoryB = 'SQLite performance tuning with WAL journal mode and connection pooling';
+
+      const similarity = jaccardSimilarity(memoryA, memoryB);
+      // Should exceed the 0.3 threshold for FTS fallback linking
+      expect(similarity).toBeGreaterThanOrEqual(0.3);
+    });
+
+    it('should not link unrelated memories', () => {
+      const memoryA = 'React component lifecycle hooks and state management';
+      const memoryB = 'PostgreSQL database backup and restore procedures';
+
+      const similarity = jaccardSimilarity(memoryA, memoryB);
+      // Should be below the 0.3 threshold
+      expect(similarity).toBeLessThan(0.3);
+    });
+
+    it('should compute correct strength: min(0.7, sim + 0.2)', () => {
+      const memoryA = 'SQLite WAL mode performance optimization database';
+      const memoryB = 'SQLite WAL mode performance tuning database';
+      const sim = jaccardSimilarity(memoryA, memoryB);
+      const strength = Math.min(0.7, sim + 0.2);
+      expect(strength).toBeGreaterThan(0.2);
+      expect(strength).toBeLessThanOrEqual(0.7);
+    });
+  });
+
+  describe('Integration: detectRelationships via addMemory', () => {
+    it('should auto-link related memories with different tags', async () => {
+      const { initDatabase, closeDatabase } = await import('../database/init.js');
+      const { addMemory, getRelatedMemories, deleteMemory } = await import('../memory/store.js');
+
+      // Close any existing database connection first
+      closeDatabase();
+
+      // Initialize a fresh test database
+      const testDbPath = ':memory:';
+      initDatabase(testDbPath);
+
+      let memoryAId: number | undefined;
+      let memoryBId: number | undefined;
+
+      try {
+        // Create first memory tagged "database"
+        const memoryA = addMemory({
+          title: 'SQLite Performance Optimization',
+          content: 'SQLite database performance optimization using WAL mode and busy timeout for concurrent access',
+          tags: ['database'],
+          project: 'test-project',
+        });
+        memoryAId = memoryA.id;
+
+        // Create second memory tagged "backend" with similar content
+        // This triggers detectRelationships internally, which should find memoryA
+        const memoryB = addMemory({
+          title: 'Backend Database Tuning',
+          content: 'SQLite performance tuning with WAL journal mode and connection pooling for better throughput',
+          tags: ['backend'],
+          project: 'test-project',
+        });
+        memoryBId = memoryB.id;
+
+        // Wait a bit for async embedding generation (though FTS fallback should work immediately)
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Verify that memoryB is linked to memoryA
+        const relatedToB = getRelatedMemories(memoryB.id);
+
+        // Should have at least one link
+        expect(relatedToB.length).toBeGreaterThan(0);
+
+        // Should contain a link to memoryA
+        const linkToA = relatedToB.find(rel => rel.memory.id === memoryA.id);
+        expect(linkToA).toBeDefined();
+
+        if (linkToA) {
+          // Verify the relationship properties
+          expect(linkToA.relationship).toBe('related');
+          expect(linkToA.strength).toBeGreaterThan(0);
+          expect(linkToA.strength).toBeLessThanOrEqual(1);
+          expect(linkToA.direction).toBe('outgoing');
+        }
+      } finally {
+        // Cleanup: delete test memories
+        if (memoryAId) {
+          try { deleteMemory(memoryAId); } catch (e) { /* ignore */ }
+        }
+        if (memoryBId) {
+          try { deleteMemory(memoryBId); } catch (e) { /* ignore */ }
+        }
+        // Close the database connection
+        closeDatabase();
+      }
+    });
   });
 });

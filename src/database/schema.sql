@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS memories (
   last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   metadata TEXT DEFAULT '{}',  -- JSON object
+  embedding BLOB,  -- Vector embedding for semantic search
+  scope TEXT DEFAULT 'project',  -- Scope: project or global
+  transferable INTEGER DEFAULT 0,  -- Cross-project sharing flag
 
   -- Index for common queries
   CONSTRAINT valid_category CHECK(category IN (

@@ -1202,20 +1202,16 @@ export function getAllMemoryLinks(): MemoryLink[] {
 }
 
 /**
- * Detect potential relationships for a new memory
- * Returns memories that might be related based on:
- * - Shared tags
- * - Similar project
- * - Content similarity (keywords)
+ * Detect tag-based links for a memory.
+ * Finds memories sharing tags and scores by overlap count.
  */
-export function detectRelationships(
+function detectTagLinks(
+  db: ReturnType<typeof getDatabase>,
   memory: Memory,
-  maxResults: number = 5
+  maxResults: number
 ): { targetId: number; relationship: RelationshipType; strength: number }[] {
-  const db = getDatabase();
   const results: { targetId: number; relationship: RelationshipType; strength: number }[] = [];
 
-  // Find memories with shared tags
   if (memory.tags.length > 0) {
     const tagPlaceholders = memory.tags.map(() => '?').join(',');
     const tagMatches = db.prepare(`
@@ -1234,38 +1230,124 @@ export function detectRelationships(
     }
   }
 
-  // Find memories in the same project
-  if (memory.project) {
-    const projectMatches = db.prepare(`
-      SELECT id FROM memories
-      WHERE project = ? AND id != ?
-      ORDER BY last_accessed DESC
-      LIMIT ?
-    `).all(memory.project, memory.id, maxResults) as { id: number }[];
+  return results;
+}
 
-    for (const match of projectMatches) {
-      // Only add if not already in results
-      if (!results.find(r => r.targetId === match.id)) {
-        results.push({ targetId: match.id, relationship: 'related', strength: 0.4 });
+/**
+ * Detect embedding-based semantic links for a memory.
+ * Computes cosine similarity against top memories that have embeddings.
+ */
+function detectEmbeddingLinks(
+  db: ReturnType<typeof getDatabase>,
+  memory: Memory,
+  maxResults: number
+): { targetId: number; relationship: RelationshipType; strength: number }[] {
+  if (!memory.embedding) return [];
+
+  const candidates = db.prepare(`
+    SELECT id, embedding FROM memories
+    WHERE embedding IS NOT NULL AND id != ?
+    ORDER BY decayed_score DESC
+    LIMIT 100
+  `).all(memory.id) as { id: number; embedding: Buffer }[];
+
+  const results: { targetId: number; relationship: RelationshipType; strength: number }[] = [];
+  const sourceEmbedding = new Float32Array(memory.embedding.buffer, memory.embedding.byteOffset, memory.embedding.byteLength / 4);
+
+  for (const candidate of candidates) {
+    const candidateEmbedding = new Float32Array(candidate.embedding.buffer, candidate.embedding.byteOffset, candidate.embedding.byteLength / 4);
+    const similarity = cosineSimilarity(sourceEmbedding, candidateEmbedding);
+    if (similarity >= 0.6) {
+      results.push({
+        targetId: candidate.id,
+        relationship: 'related',
+        strength: Math.min(0.9, similarity),
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Detect content-based links using FTS5 and Jaccard similarity.
+ * Fallback when embeddings are not available.
+ */
+function detectFtsLinks(
+  db: ReturnType<typeof getDatabase>,
+  memory: Memory,
+  maxResults: number
+): { targetId: number; relationship: RelationshipType; strength: number }[] {
+  const queryText = `${memory.title} ${memory.content.slice(0, 200)}`;
+  const escapedQuery = escapeFts5Query(queryText);
+  if (!escapedQuery.trim()) return [];
+
+  let ftsMatches: { id: number; title: string; content: string }[];
+  try {
+    ftsMatches = db.prepare(`
+      SELECT m.id, m.title, m.content
+      FROM memories_fts fts
+      JOIN memories m ON m.id = fts.rowid
+      WHERE memories_fts MATCH ?
+        AND m.id != ?
+      LIMIT ?
+    `).all(escapedQuery, memory.id, maxResults * 2) as { id: number; title: string; content: string }[];
+  } catch {
+    return [];
+  }
+
+  const results: { targetId: number; relationship: RelationshipType; strength: number }[] = [];
+  for (const match of ftsMatches) {
+    const matchText = `${match.title} ${match.content.slice(0, 200)}`;
+    const sim = jaccardSimilarity(queryText, matchText);
+    if (sim >= 0.3) {
+      results.push({
+        targetId: match.id,
+        relationship: 'related',
+        strength: Math.min(0.7, sim + 0.2),
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Detect potential relationships for a new memory
+ * Uses three strategies in priority order:
+ * 1. Tag-based linking (shared tags)
+ * 2. Embedding-based semantic linking (cosine similarity >= 0.6)
+ * 3. FTS content similarity fallback (Jaccard similarity >= 0.3)
+ */
+export function detectRelationships(
+  memory: Memory,
+  maxResults: number = 5
+): { targetId: number; relationship: RelationshipType; strength: number }[] {
+  const db = getDatabase();
+  const seen = new Set<number>();
+  const results: { targetId: number; relationship: RelationshipType; strength: number }[] = [];
+
+  function addResults(links: { targetId: number; relationship: RelationshipType; strength: number }[]) {
+    for (const link of links) {
+      if (!seen.has(link.targetId)) {
+        seen.add(link.targetId);
+        results.push(link);
       }
     }
   }
 
-  // Find memories with similar category
-  const categoryMatches = db.prepare(`
-    SELECT id FROM memories
-    WHERE category = ? AND id != ?
-    ORDER BY salience DESC, last_accessed DESC
-    LIMIT ?
-  `).all(memory.category, memory.id, 3) as { id: number }[];
+  // 1. Tag-based linking
+  addResults(detectTagLinks(db, memory, maxResults));
 
-  for (const match of categoryMatches) {
-    if (!results.find(r => r.targetId === match.id)) {
-      results.push({ targetId: match.id, relationship: 'related', strength: 0.3 });
-    }
+  // 2. Embedding-based semantic linking
+  addResults(detectEmbeddingLinks(db, memory, maxResults));
+
+  // 3. FTS content similarity fallback (when no embeddings)
+  if (!memory.embedding) {
+    addResults(detectFtsLinks(db, memory, maxResults));
   }
 
-  // Sort by strength and limit
+  // Sort by strength descending and limit
   return results
     .sort((a, b) => b.strength - a.strength)
     .slice(0, maxResults);
