@@ -12,7 +12,7 @@ Claude Code has fundamental limitations:
 
 ## The Solution
 
-Claude Memory works like a human brain:
+Claude Cortex works like a human brain:
 
 - **Short-term memory** - Session-level, high detail, decays fast
 - **Long-term memory** - Cross-session, consolidated, persists
@@ -277,8 +277,8 @@ npm run watch
 
 ## How This Differs from Other Solutions
 
-| Feature | Claude Memory | Other MCP Memory Tools |
-|---------|--------------|------------------------|
+| Feature | Claude Cortex | Other MCP Memory Tools |
+|---------|---------------|------------------------|
 | Salience detection | ✅ Auto-detects importance | ❌ Manual only |
 | Temporal decay | ✅ Memories fade naturally | ❌ Static storage |
 | Consolidation | ✅ STM → LTM promotion | ❌ Flat storage |
