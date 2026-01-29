@@ -2,6 +2,76 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.3] - 2026-01-29
+
+### Security
+- **CRITICAL: Removed `shell: true` from Clawdbot hook** — `execFile` with `shell: true` allowed command injection via memory content. Now uses safe direct execution.
+- **Parameterized SQL in session-start hook** — Replaced string interpolation in `NOT IN` clause with proper `?` placeholders.
+- **Word-boundary regex for SQL endpoint** — DROP/TRUNCATE blocking now uses `\bDROP\b` to avoid false positives on column names.
+
+### Fixed
+- **Quote escaping in Clawdbot hook** — Single quotes in memory content are now escaped (`''`) instead of stripped, preserving data integrity.
+
+### Added
+- **`prepublishOnly` script** — Automatically runs `npm run build` before `npm publish` to prevent stale dist.
+
+## [1.8.2] - 2026-01-29
+
+### Fixed
+- Strengthen post-compaction `get_context` directive to ensure context is recalled after compaction.
+- Pre-compact hook now reads session JSONL files directly for reliable conversation extraction.
+
+## [1.8.1] - 2026-01-29
+
+### Changed
+- **Unified setup command** — `npx claude-cortex setup` now configures both Claude Code (CLAUDE.md) and Clawdbot/Moltbot hook in one step.
+
+## [1.8.0] - 2026-01-29
+
+### Added
+- **Clawdbot/Moltbot hook installer** — `npx claude-cortex clawdbot install|uninstall|status`
+- Bundled `cortex-memory` hook that integrates via mcporter for persistent memory in Clawdbot sessions.
+- Auto-saves session context on `/new`, injects past memories on bootstrap, keyword triggers ("remember this").
+
+## [1.7.2] - 2026-01-28
+
+### Added
+- Moltbot/ClawdBot integration section in README with mcporter usage examples.
+
+## [1.7.1] - 2026-01-28
+
+### Fixed
+- Added `hook` subcommand routing, fixed hook documentation.
+
+## [1.7.0] - 2026-01-28
+
+### Added
+- **`setup` command** — `npx claude-cortex setup` injects proactive memory instructions into `~/.claude/CLAUDE.md`.
+
+## [1.6.1] - 2026-01-28
+
+### Fixed
+- **ARM64 embedding support** — Migrated from `@xenova/transformers` to `@huggingface/transformers` for native Apple Silicon compatibility.
+
+## [1.6.0] - 2026-01-28
+
+### Added
+- **Memory intelligence overhaul** — 7 improvements to connect isolated subsystems:
+  - Semantic linking in `detectRelationships` (embeddings + FTS5 content similarity)
+  - Search results reinforce salience and create co-search links
+  - Dynamic salience evolution via link count, contradictions, and mention count
+  - Contradictions surfaced in search results with warnings
+  - Memory enrichment wired into search flow
+  - Real consolidation merges related STM into coherent LTM entries
+  - Increased activation weight in search, cache pruning
+
+## [1.5.2] - 2026-01-28
+
+### Added
+- **Cross-platform auto-start service** — `npx claude-cortex service install|uninstall|status`
+- Supports macOS (launchd), Linux (systemd), Windows (Startup folder VBS script).
+- Logs to `~/.claude-cortex/logs/`.
+
 ## [1.5.1] - 2026-01-28
 
 ### Improved
