@@ -656,7 +656,7 @@ function outputReminder(autoExtractedCount, dynamicThreshold) {
   if (autoExtractedCount > 0) {
     console.log(`
 🧠 AUTO-MEMORY: ${autoExtractedCount} important items were automatically saved before compaction.
-After compaction, use 'get_context' to retrieve your memories.
+IMPORTANT: You MUST call the 'get_context' MCP tool NOW to restore your project knowledge.
 `);
   } else {
     const thresholdNote = dynamicThreshold > 0.5
@@ -665,7 +665,7 @@ After compaction, use 'get_context' to retrieve your memories.
     console.log(`
 🧠 PRE-COMPACT: No auto-extractable content found with high enough salience${thresholdNote}.
 If there's something important, use 'remember' to save it explicitly.
-After compaction, use 'get_context' to retrieve your memories.
+IMPORTANT: You MUST call the 'get_context' MCP tool NOW to restore your project knowledge.
 `);
   }
 }

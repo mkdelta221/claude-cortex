@@ -203,7 +203,7 @@ score = base_salience × (0.995 ^ hours_since_access)
 When Claude Code compacts context:
 
 1. **Before compaction** - The PreCompact hook **automatically extracts** important content
-2. **After compaction** - Use `get_context` to restore what's relevant
+2. **After compaction** - Claude is directed to call `get_context` automatically to restore context
 
 ### Automatic Memory Extraction (PreCompact Hook)
 
@@ -211,7 +211,7 @@ The system includes a hook that runs before every context compaction:
 
 ```
 🧠 AUTO-MEMORY: 3 important items were automatically saved before compaction.
-After compaction, use 'get_context' to retrieve your memories.
+IMPORTANT: You MUST call the 'get_context' MCP tool NOW to restore your project knowledge.
 ```
 
 **What gets auto-extracted:**
