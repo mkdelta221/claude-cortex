@@ -1,11 +1,16 @@
 /**
- * Injects proactive memory instructions into ~/.claude/CLAUDE.md
- * Idempotent — skips if instructions already present.
+ * Full setup for Claude Cortex.
+ *
+ * 1. Injects proactive memory instructions into ~/.claude/CLAUDE.md (Claude Code)
+ * 2. Installs cortex-memory hook into Clawdbot/Moltbot if detected
+ *
+ * Both steps are idempotent.
  */
 
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { installClawdbotHook, findClawdbotHooksDir } from './clawdbot.js';
 
 const MARKER = '# Claude Cortex — Memory System';
 
@@ -24,29 +29,44 @@ You have access to a persistent memory system via MCP tools (\`remember\`, \`rec
 Do not wait until the end of the session. Call \`remember\` right after the event happens.
 `;
 
-export async function setupClaudeMd(): Promise<void> {
+function setupClaudeCode(): void {
   const claudeDir = path.join(os.homedir(), '.claude');
   const claudeMdPath = path.join(claudeDir, 'CLAUDE.md');
 
-  // Ensure ~/.claude/ exists
   fs.mkdirSync(claudeDir, { recursive: true });
 
-  // Read existing content
   let existing = '';
   if (fs.existsSync(claudeMdPath)) {
     existing = fs.readFileSync(claudeMdPath, 'utf-8');
   }
 
-  // Check if already configured
   if (existing.includes(MARKER)) {
-    console.log('✓ Claude Cortex instructions already present in ~/.claude/CLAUDE.md');
-    return;
+    console.log('✓ Claude Code: instructions already present in ~/.claude/CLAUDE.md');
+  } else {
+    const newContent = existing.trimEnd() + '\n' + INSTRUCTIONS;
+    fs.writeFileSync(claudeMdPath, newContent, 'utf-8');
+    console.log('✓ Claude Code: added memory instructions to ~/.claude/CLAUDE.md');
+  }
+}
+
+export async function setupClaudeMd(): Promise<void> {
+  console.log('Setting up Claude Cortex...\n');
+
+  // 1. Claude Code — always
+  setupClaudeCode();
+
+  // 2. Clawdbot/Moltbot — if detected
+  const hooksDir = findClawdbotHooksDir();
+  if (hooksDir) {
+    const hookExists = fs.existsSync(path.join(hooksDir, 'cortex-memory'));
+    if (hookExists) {
+      console.log('✓ Clawdbot: cortex-memory hook already installed');
+    } else {
+      await installClawdbotHook();
+    }
+  } else {
+    console.log('- Clawdbot/Moltbot: not detected (skipped)');
   }
 
-  // Append instructions
-  const newContent = existing.trimEnd() + '\n' + INSTRUCTIONS;
-  fs.writeFileSync(claudeMdPath, newContent, 'utf-8');
-
-  console.log('✓ Added Claude Cortex memory instructions to ~/.claude/CLAUDE.md');
-  console.log('  Claude will now proactively use memory tools in all projects.');
+  console.log('\nSetup complete.');
 }

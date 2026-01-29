@@ -22,7 +22,7 @@ const HOOK_SOURCE = path.resolve(__dirname, '..', '..', 'hooks', 'clawdbot', HOO
 /**
  * Find Clawdbot's bundled hooks directory by locating the binary
  */
-function findClawdbotHooksDir(): string | null {
+export function findClawdbotHooksDir(): string | null {
   try {
     const binPath = execSync('which clawdbot 2>/dev/null || which moltbot 2>/dev/null', {
       encoding: 'utf-8',
