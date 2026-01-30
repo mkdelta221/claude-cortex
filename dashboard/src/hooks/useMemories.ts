@@ -383,3 +383,76 @@ export function useRestartServer() {
     mutationFn: restartServer,
   });
 }
+
+// ============================================
+// INSIGHTS API
+// ============================================
+
+// Activity data for heatmap
+export interface ActivityDay {
+  date: string;
+  count: number;
+}
+
+async function fetchActivity(project?: string): Promise<{ activity: ActivityDay[] }> {
+  const params = project ? `?project=${project}` : '';
+  const response = await fetch(`${API_BASE}/api/memories/activity${params}`);
+  if (!response.ok) throw new Error('Failed to fetch activity');
+  return response.json();
+}
+
+export function useActivity(project?: string) {
+  return useQuery({
+    queryKey: ['activity', project],
+    queryFn: () => fetchActivity(project),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// Memory quality data
+export interface QualityData {
+  neverAccessed: { count: number; items: Array<Record<string, unknown>> };
+  stale: { count: number; items: Array<Record<string, unknown>> };
+  duplicates: { count: number; items: Array<Record<string, unknown>> };
+}
+
+async function fetchQuality(project?: string): Promise<QualityData> {
+  const params = project ? `?project=${project}` : '';
+  const response = await fetch(`${API_BASE}/api/memories/quality${params}`);
+  if (!response.ok) throw new Error('Failed to fetch quality');
+  return response.json();
+}
+
+export function useQuality(project?: string) {
+  return useQuery({
+    queryKey: ['quality', project],
+    queryFn: () => fetchQuality(project),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// Contradictions data
+export interface Contradiction {
+  memoryAId: number;
+  memoryATitle: string;
+  memoryBId: number;
+  memoryBTitle: string;
+  score: number;
+  reason: string;
+  sharedTopics: string[];
+}
+
+async function fetchContradictions(project?: string): Promise<{ contradictions: Contradiction[]; count: number }> {
+  const params = project ? `?project=${project}` : '';
+  const response = await fetch(`${API_BASE}/api/contradictions${params}`);
+  if (!response.ok) throw new Error('Failed to fetch contradictions');
+  return response.json();
+}
+
+export function useContradictions(project?: string) {
+  return useQuery({
+    queryKey: ['contradictions', project],
+    queryFn: () => fetchContradictions(project),
+    staleTime: 5 * 60 * 1000,
+  });
+}

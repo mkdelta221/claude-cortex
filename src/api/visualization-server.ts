@@ -561,6 +561,82 @@ export function startVisualizationServer(dbPath?: string): void {
   });
 
   // ============================================
+  // INSIGHTS ENDPOINTS
+  // ============================================
+
+  // Activity data for heatmap
+  app.get('/api/memories/activity', (req: Request, res: Response) => {
+    try {
+      const project = typeof req.query.project === 'string' ? req.query.project : undefined;
+      const db = getDatabase();
+
+      const query = project
+        ? `SELECT date(created_at) as date, COUNT(*) as count
+           FROM memories WHERE project = ?
+           GROUP BY date(created_at)
+           ORDER BY date DESC
+           LIMIT 365`
+        : `SELECT date(created_at) as date, COUNT(*) as count
+           FROM memories
+           GROUP BY date(created_at)
+           ORDER BY date DESC
+           LIMIT 365`;
+
+      const rows = project
+        ? db.prepare(query).all(project) as { date: string; count: number }[]
+        : db.prepare(query).all() as { date: string; count: number }[];
+
+      res.json({ activity: rows });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Memory quality analysis
+  app.get('/api/memories/quality', (req: Request, res: Response) => {
+    try {
+      const project = typeof req.query.project === 'string' ? req.query.project : undefined;
+      const db = getDatabase();
+
+      const projectFilter = project ? 'AND project = ?' : '';
+      const params = project ? [project] : [];
+
+      // Never accessed (access_count = 0, excluding very recent)
+      const neverAccessed = db.prepare(`
+        SELECT id, title, category, type, created_at, salience
+        FROM memories WHERE access_count = 0 ${projectFilter}
+        AND created_at < datetime('now', '-1 day')
+        ORDER BY created_at DESC LIMIT 50
+      `).all(...params) as Array<Record<string, unknown>>;
+
+      // Stale (low decay, not accessed in 30+ days)
+      const stale = db.prepare(`
+        SELECT id, title, category, type, last_accessed, decayed_score, salience
+        FROM memories WHERE decayed_score < 0.3 ${projectFilter}
+        AND last_accessed < datetime('now', '-30 days')
+        ORDER BY decayed_score ASC LIMIT 50
+      `).all(...params) as Array<Record<string, unknown>>;
+
+      // Potential duplicates (same title, different IDs)
+      const duplicates = db.prepare(`
+        SELECT m1.id as id1, m1.title as title1, m2.id as id2, m2.title as title2
+        FROM memories m1
+        JOIN memories m2 ON m1.title = m2.title AND m1.id < m2.id
+        ${project ? 'WHERE m1.project = ?' : ''}
+        LIMIT 50
+      `).all(...params) as Array<Record<string, unknown>>;
+
+      res.json({
+        neverAccessed: { count: neverAccessed.length, items: neverAccessed },
+        stale: { count: stale.length, items: stale },
+        duplicates: { count: duplicates.length, items: duplicates },
+      });
+    } catch (error) {
+      res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // ============================================
   // SQL CONSOLE ENDPOINT
   // ============================================
 
