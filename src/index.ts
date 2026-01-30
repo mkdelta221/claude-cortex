@@ -16,6 +16,7 @@
  *   npx claude-cortex setup                    # Configure Claude for proactive memory use
  *   npx claude-cortex hook pre-compact         # Run pre-compact hook (for settings.json)
  *   npx claude-cortex hook session-start       # Run session-start hook (for settings.json)
+ *   npx claude-cortex hook session-end         # Run session-end hook (for settings.json)
  *   npx claude-cortex service install         # Auto-start dashboard on login
  *   npx claude-cortex service uninstall       # Remove auto-start
  *   npx claude-cortex service status          # Check service status

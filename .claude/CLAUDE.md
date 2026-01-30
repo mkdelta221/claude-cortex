@@ -40,6 +40,7 @@ cd dashboard && npm run dev
 | `src/api/visualization-server.ts` | REST API + WebSocket for dashboard |
 | `scripts/session-start-hook.mjs` | Auto-recall context on session start |
 | `scripts/pre-compact-hook.mjs` | Auto-extract memories before compaction |
+| `scripts/session-end-hook.mjs` | Auto-extract memories on session exit |
 | `src/service/install.ts` | Cross-platform service installer |
 | `src/service/templates.ts` | Launchd/systemd/Windows service templates |
 | `dashboard/` | 3D brain visualization (Next.js) |
@@ -111,6 +112,15 @@ Runs before every context compaction (manual or auto):
 - All auto-extracted memories tagged with "auto-extracted" for filtering
 - Located at: `scripts/pre-compact-hook.mjs`
 - Configured in: `~/.claude/settings.json` → hooks.PreCompact
+
+### SessionEnd Hook - Auto-Extract on Exit
+Runs when a Claude Code session ends:
+- **Auto-extracts** high-salience content (same patterns as PreCompact)
+- Skips extraction on `/clear` (intentional session wipe)
+- Reads transcript from the session JSONL file
+- Best-effort: does NOT fire on forced termination (terminal killed, SSH drops)
+- Located at: `scripts/session-end-hook.mjs`
+- Configured in: `~/.claude/settings.json` → hooks.SessionEnd
 
 **What Gets Auto-Extracted:**
 - Decisions: "decided to...", "going with...", "chose...", "using...", "opted for..."

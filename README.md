@@ -77,7 +77,6 @@ Add to `~/.claude/settings.json` for automatic memory extraction and context loa
   "hooks": {
     "PreCompact": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
@@ -89,12 +88,22 @@ Add to `~/.claude/settings.json` for automatic memory extraction and context loa
     ],
     "SessionStart": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
             "command": "npx -y claude-cortex hook session-start",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y claude-cortex hook session-end",
+            "timeout": 10
           }
         ]
       }
@@ -105,6 +114,7 @@ Add to `~/.claude/settings.json` for automatic memory extraction and context loa
 
 - **PreCompact**: Auto-saves important context before compaction events
 - **SessionStart**: Auto-loads project context at the start of each session
+- **SessionEnd**: Auto-saves context when the session exits
 
 ### 4. Run Setup (Recommended)
 
@@ -245,6 +255,22 @@ Claude: Let me check my memory.
 [Calls recall tool with query "database"]
 > Found: "Using PostgreSQL for the database" (architecture, 95% salience)
 ```
+
+## Hook Coverage
+
+Claude Cortex uses three hooks to cover the full session lifecycle:
+
+| Hook | Fires When | What It Does | Reliability |
+|------|-----------|--------------|-------------|
+| **SessionStart** | Session begins | Loads project context from memory | Reliable |
+| **PreCompact** | Before context compaction | Extracts important content before context is lost | Reliable (primary safety net) |
+| **SessionEnd** | Session terminates | Extracts important content on exit | Best-effort* |
+
+*SessionEnd does not fire on forced termination (terminal killed, SSH drops, crash). PreCompact remains the primary safety net since compaction happens more frequently than session exits.
+
+### Stop Hook (Opt-in, Future)
+
+A prompt-based Stop hook that uses Haiku to evaluate each Claude response for important events is planned. This calls the Haiku API on every response, which adds latency and cost. It will be opt-in via `--with-stop-hook` flag.
 
 ## Configuration
 

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.0] - 2026-01-30
+
+### Added
+- **SessionEnd hook** — Auto-extracts important context when a Claude Code session exits. Reads the session transcript and saves high-salience memories (decisions, fixes, learnings) to the database.
+- Hook coverage matrix in README documenting when each hook fires and its reliability.
+- `npx claude-cortex hook session-end` CLI command for manual invocation.
+
+### Changed
+- SessionEnd hook skips extraction on `/clear` (intentional session wipe).
+- Auto-extracted memories from SessionEnd are tagged with `session-end` for filtering.
+
 ## [1.8.3] - 2026-01-29
 
 ### Security
