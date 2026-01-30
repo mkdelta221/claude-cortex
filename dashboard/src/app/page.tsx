@@ -17,7 +17,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Memory } from '@/types/memory';
 
-// Dynamic import for 3D scene (avoid SSR issues)
+// Dynamic imports (avoid SSR issues with canvas/WebGL)
+const KnowledgeGraph = dynamic(
+  () => import('@/components/graph/KnowledgeGraph'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full flex items-center justify-center bg-slate-950">
+        <div className="text-slate-400 animate-pulse">Loading Graph...</div>
+      </div>
+    ),
+  }
+);
+
 const BrainScene = dynamic(
   () => import('@/components/brain/BrainScene').then((mod) => mod.BrainScene),
   {
@@ -287,7 +299,12 @@ export default function DashboardPage() {
             )
           )}
           {viewMode === 'graph' && (
-            <div className="flex items-center justify-center h-full text-slate-400">Graph view — coming soon</div>
+            <KnowledgeGraph
+              memories={memories}
+              links={links}
+              selectedMemory={selectedMemory}
+              onSelectMemory={handleSelectMemory}
+            />
           )}
           {viewMode === 'memories' && (
             <div className="flex items-center justify-center h-full text-slate-400">Memories view — coming soon</div>
