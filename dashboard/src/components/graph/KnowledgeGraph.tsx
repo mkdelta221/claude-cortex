@@ -113,13 +113,32 @@ export default function KnowledgeGraph({
 
       // Label when zoomed in enough
       if (globalScale > 1.5) {
-        const label = node.name;
+        const maxChars = 40;
+        const label = node.name.length > maxChars ? node.name.slice(0, maxChars) + '…' : node.name;
         const fontSize = Math.max(10, 12 / globalScale);
         ctx.font = `${fontSize}px Sans-Serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-        ctx.fillText(label, x, y + radius + 2);
+
+        const textWidth = ctx.measureText(label).width;
+        const textY = y + radius + 3;
+        const padding = 2;
+
+        // Dark background pill behind text
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.85)';
+        ctx.beginPath();
+        ctx.roundRect(
+          x - textWidth / 2 - padding,
+          textY - padding,
+          textWidth + padding * 2,
+          fontSize + padding * 2,
+          3,
+        );
+        ctx.fill();
+
+        // White text with full opacity
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillText(label, x, textY);
       }
     },
     [selectedMemory],
