@@ -12,6 +12,7 @@ import { useDashboardStore } from '@/lib/store';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useSuggestions } from '@/hooks/useSuggestions';
 import { MemoryDetail } from '@/components/memory/MemoryDetail';
+import { MemoriesView } from '@/components/memories/MemoriesView';
 import { NavRail } from '@/components/nav/NavRail';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -307,7 +308,11 @@ export default function DashboardPage() {
             />
           )}
           {viewMode === 'memories' && (
-            <div className="flex items-center justify-center h-full text-slate-400">Memories view — coming soon</div>
+            <MemoriesView
+              memories={memories}
+              selectedMemory={selectedMemory}
+              onSelectMemory={handleSelectMemory}
+            />
           )}
           {viewMode === 'insights' && (
             <div className="flex items-center justify-center h-full text-slate-400">Insights view — coming soon</div>
