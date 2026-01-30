@@ -32,7 +32,7 @@ export function MemoryCard({ memory, isSelected, onSelect, isChecked, onCheck }:
     <div
       onClick={() => onSelect(memory)}
       className={`bg-slate-900 border rounded-lg p-3 hover:border-slate-600 cursor-pointer transition-colors relative ${
-        isSelected ? 'border-blue-500' : 'border-slate-800'
+        isSelected ? 'border-cyan-500' : 'border-slate-800'
       }`}
     >
       {/* Salience bar */}

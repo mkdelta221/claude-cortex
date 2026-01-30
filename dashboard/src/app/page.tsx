@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useMemoriesWithRealtime, useStats, useAccessMemory, useConsolidate, useProjects, useMemoryLinks, useControlStatus, usePauseMemory, useResumeMemory } from '@/hooks/useMemories';
 import { useDashboardStore } from '@/lib/store';
@@ -285,40 +286,49 @@ export default function DashboardPage() {
         <NavRail />
 
         {/* Active View */}
-        <div className="flex-1 relative overflow-hidden">
-          {viewMode === 'brain' && (
-            memoriesLoading ? (
-              <div className="w-full h-full flex items-center justify-center">
-                <div className="text-slate-400 animate-pulse">Loading memories...</div>
-              </div>
-            ) : (
-              <BrainScene
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={viewMode}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="flex-1 relative overflow-hidden"
+          >
+            {viewMode === 'brain' && (
+              memoriesLoading ? (
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="text-slate-400 animate-pulse">Loading memories...</div>
+                </div>
+              ) : (
+                <BrainScene
+                  memories={memories}
+                  links={links}
+                  selectedMemory={selectedMemory}
+                  onSelectMemory={handleSelectMemory}
+                />
+              )
+            )}
+            {viewMode === 'graph' && (
+              <KnowledgeGraph
                 memories={memories}
                 links={links}
                 selectedMemory={selectedMemory}
                 onSelectMemory={handleSelectMemory}
               />
-            )
-          )}
-          {viewMode === 'graph' && (
-            <KnowledgeGraph
-              memories={memories}
-              links={links}
-              selectedMemory={selectedMemory}
-              onSelectMemory={handleSelectMemory}
-            />
-          )}
-          {viewMode === 'memories' && (
-            <MemoriesView
-              memories={memories}
-              selectedMemory={selectedMemory}
-              onSelectMemory={handleSelectMemory}
-            />
-          )}
-          {viewMode === 'insights' && (
-            <InsightsView selectedProject={selectedProject} stats={stats} />
-          )}
-        </div>
+            )}
+            {viewMode === 'memories' && (
+              <MemoriesView
+                memories={memories}
+                selectedMemory={selectedMemory}
+                onSelectMemory={handleSelectMemory}
+              />
+            )}
+            {viewMode === 'insights' && (
+              <InsightsView selectedProject={selectedProject} stats={stats} />
+            )}
+          </motion.div>
+        </AnimatePresence>
 
         {/* Right Detail Panel */}
         {selectedMemory && (
