@@ -54,6 +54,31 @@ const PASCAL_CASE_FALSE_POSITIVES = new Set([
   'BEGIN', 'COMMIT', 'ROLLBACK',
 ]);
 
+// Generic words that should never become entities
+const STOPWORDS = new Set([
+  'project', 'the', 'a', 'an', 'this', 'that', 'these', 'those',
+  'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+  'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
+  'shall', 'can', 'need', 'must', 'it', 'its', 'we', 'our', 'my', 'your',
+  'not', 'no', 'yes', 'all', 'any', 'some', 'each', 'every', 'both',
+  'new', 'old', 'first', 'last', 'next', 'now', 'then', 'here', 'there',
+  'up', 'down', 'out', 'in', 'on', 'off', 'over', 'under', 'more', 'less',
+  'also', 'just', 'only', 'very', 'still', 'already', 'always', 'never',
+  'added', 'built', 'made', 'set', 'got', 'put', 'run', 'let', 'get',
+  'use', 'used', 'using', 'make', 'take', 'keep', 'work', 'call',
+  'issue', 'issues', 'fix', 'fixed', 'bug', 'error', 'change', 'changes',
+  'feature', 'step', 'phase', 'task', 'item', 'thing', 'things',
+  'way', 'part', 'type', 'kind', 'form', 'case', 'point', 'end', 'start',
+  'data', 'code', 'file', 'function', 'class', 'method', 'system', 'test',
+  'cross', 'visual', 'auto', 'default', 'custom', 'main', 'base',
+  'uses', 'with', 'for', 'from', 'after', 'before', 'same', 'key',
+  'other', 'into', 'about', 'when', 'where', 'how', 'what', 'which',
+  'notes', 'note', 'decisions', 'decision', 'discoveries', 'editing',
+  'making', 'matching', 'update', 'updates', 'network', 'design',
+  'pattern', 'approach', 'strategy', 'architecture', 'principle',
+  'extraction', 'implementation', 'configuration', 'optimization',
+]);
+
 const FILE_EXT_RE = /\b[\w./-]+\.(ts|py|js|sql|json|md|tsx|jsx|rs|go|css|html)\b/g;
 const DIR_PATH_RE = /\b(src|lib|dist|tests?|scripts?|dashboard)\/[\w./-]+\b/g;
 const USERNAME_RE = /@(\w+)/g;
@@ -72,6 +97,8 @@ export function extractFromMemory(title: string, content: string, category: stri
   const entityMap = new Map<string, ExtractedEntity>();
 
   function addEntity(name: string, type: EntityType): void {
+    if (STOPWORDS.has(name.toLowerCase())) return;
+    if (name.length < 2) return;
     const key = `${name}::${type}`;
     if (!entityMap.has(key)) {
       entityMap.set(key, { name, type });
@@ -140,17 +167,16 @@ export function extractFromMemory(title: string, content: string, category: stri
     addEntity(m[1], 'person');
   }
 
-  // Concepts
+  // Concepts — only hyphenated or multi-word terms (e.g., "microservices architecture")
   for (const m of text.matchAll(CONCEPT_BEFORE_RE)) {
     const concept = m[1].toLowerCase();
-    if (concept.length > 2 && !['the', 'this', 'that', 'our'].includes(concept)) {
+    if (concept.length > 4) {
       addEntity(concept, 'concept');
     }
   }
-  // Reset lastIndex since we reuse the text
   for (const m of text.matchAll(CONCEPT_RE)) {
     const concept = m[1].trim().toLowerCase();
-    if (concept.length > 2 && !['the', 'this', 'that', 'our', 'its'].includes(concept)) {
+    if (concept.length > 4) {
       addEntity(concept, 'concept');
     }
   }
@@ -172,18 +198,26 @@ export function extractFromMemory(title: string, content: string, category: stri
   }
 
   function ensureEntity(name: string): void {
+    if (STOPWORDS.has(name.toLowerCase())) return;
     // Check if any entity with this name exists
     for (const [key] of entityMap) {
       if (key.startsWith(name + '::')) return;
     }
-    // Guess type
+    // Guess type — only promote to entity if it's a known tool/language
     if (TOOLS_LOWER.has(name.toLowerCase())) {
       addEntity(TOOLS_LOWER.get(name.toLowerCase())!, 'tool');
     } else if (LANGUAGES_LOWER.has(name.toLowerCase())) {
       addEntity(LANGUAGES_LOWER.get(name.toLowerCase())!, 'language');
-    } else {
-      addEntity(name, 'concept');
     }
+    // Don't create concept entities for unknown words in triples
+  }
+
+  function isKnownEntity(name: string): boolean {
+    if (STOPWORDS.has(name.toLowerCase())) return false;
+    for (const [key] of entityMap) {
+      if (key.startsWith(name + '::') || key.toLowerCase().startsWith(name.toLowerCase() + '::')) return true;
+    }
+    return TOOLS_LOWER.has(name.toLowerCase()) || LANGUAGES_LOWER.has(name.toLowerCase());
   }
 
   // "using X for Y" → X uses Y
@@ -201,12 +235,11 @@ export function extractFromMemory(title: string, content: string, category: stri
     addTriple(m[1], 'depends_on', m[2]);
   }
 
-  // "fixed ... by X" or "the fix was X"
-  for (const m of text.matchAll(/\bfixed\s+(.+?)\s+by\s+(\w+(?:\s+\w+){0,3})\b/gi)) {
-    addTriple(m[2], 'fixes', m[1].split(/\s+/).slice(0, 3).join(' '));
-  }
-  for (const m of text.matchAll(/\bthe\s+fix\s+was\s+(\w+(?:\s+\w+){0,3})\b/gi)) {
-    addTriple(m[1], 'fixes', 'issue');
+  // "fixed X by Y" — only if X or Y are known entities
+  for (const m of text.matchAll(/\bfixed\s+(\w+)\s+by\s+(\w+)\b/gi)) {
+    if (isKnownEntity(m[1]) || isKnownEntity(m[2])) {
+      addTriple(m[2], 'fixes', m[1]);
+    }
   }
 
   // "chose X over Y"
@@ -220,9 +253,12 @@ export function extractFromMemory(title: string, content: string, category: stri
     addTriple(m[1], 'configures', m[2]);
   }
 
-  // "implemented X"
-  for (const m of text.matchAll(/\bimplemented\s+(\w+(?:\s+\w+)?)\b/gi)) {
-    addTriple('project', 'implements', m[1]);
+  // "implemented X" — only if X is a known entity
+  for (const m of text.matchAll(/\bimplemented\s+(\w+)\b/gi)) {
+    const word = m[1];
+    if (isKnownEntity(word)) {
+      addTriple('project', 'implements', word);
+    }
   }
 
   // "X extends Y"
