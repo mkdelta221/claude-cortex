@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.13.0] - 2026-01-31
+
+### Added
+- **Ontological Knowledge Graph** — entities and subject-predicate-object triples automatically extracted from memories
+- Pattern-based entity extraction for files, tools, languages, concepts, people, services, and patterns
+- Entity resolution with case-insensitive matching, alias lookup, and Levenshtein fuzzy matching
+- `graph_query` MCP tool — traverse the knowledge graph from any entity
+- `graph_entities` MCP tool — list known entities filtered by type
+- `graph_explain` MCP tool — find paths between two entities with source memories
+- REST API endpoints for graph data (`/api/graph/entities`, `/api/graph/triples`, `/api/graph/search`, `/api/graph/paths`)
+- Dashboard **Ontology** view with force-graph visualization, entity type filtering, and detail sidebar
+- `npx claude-cortex graph backfill` command to extract entities from existing memories
+- Brain worker graph maintenance — automatic orphan entity pruning every 30 minutes
+
 ## [1.12.0] - 2026-01-30
 
 ### Added

@@ -153,6 +153,7 @@ npx claude-cortex hook session-start
 npx claude-cortex hook session-end
 npx claude-cortex hook stop
 npx claude-cortex service install    # Auto-start dashboard on login
+npx claude-cortex graph backfill     # Extract entities from existing memories
 npx claude-cortex clawdbot install   # Install Clawdbot/Moltbot hook
 npx claude-cortex clawdbot status    # Check Clawdbot hook status
 ```
@@ -268,6 +269,7 @@ Or in MCP config:
 |----------|---------|-------------|
 | `PORT` | `3001` | API server port |
 | `CORTEX_CORS_ORIGINS` | `localhost:3030,localhost:3000` | Comma-separated allowed CORS origins |
+| `CORTEX_GRAPH_EXTRACTION` | `pattern` | Entity extraction mode (currently only `pattern`) |
 
 </details>
 
@@ -314,6 +316,36 @@ npx mcporter call --stdio "npx -y claude-cortex" get_context
 ```
 
 Memories are shared between Claude Code and Clawdbot — same SQLite database.
+
+## Knowledge Graph
+
+Claude Cortex automatically extracts entities (tools, languages, files, concepts, people) and relationships from your memories, building a knowledge graph you can query.
+
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `graph_query` | Traverse from an entity — returns connected entities up to N hops |
+| `graph_entities` | List known entities, filter by type |
+| `graph_explain` | Find paths between two entities with source memories |
+
+### Backfill Existing Memories
+
+```bash
+npx claude-cortex graph backfill
+```
+
+Extracts entities and relationships from all existing memories. Safe to run multiple times.
+
+### API Endpoints
+
+```
+GET /api/graph/entities              — List entities (filterable by type)
+GET /api/graph/entities/:id/triples  — Triples for an entity
+GET /api/graph/triples               — All triples (with pagination)
+GET /api/graph/search?q=auth         — Search entities by name
+GET /api/graph/paths?from=X&to=Y     — Shortest path between entities
+```
 
 ## How This Differs
 
