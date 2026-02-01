@@ -1,5 +1,5 @@
 /**
- * Clawdbot/Moltbot hook installer.
+ * OpenClaw/Clawdbot hook installer.
  *
  * Copies the cortex-memory hook into Clawdbot's bundled hooks directory.
  * Only works if Clawdbot is installed on the system.
@@ -24,7 +24,7 @@ const HOOK_SOURCE = path.resolve(__dirname, '..', '..', 'hooks', 'clawdbot', HOO
  */
 export function findClawdbotHooksDir(): string | null {
   try {
-    const binPath = execSync('which clawdbot 2>/dev/null || which moltbot 2>/dev/null', {
+    const binPath = execSync('which openclaw 2>/dev/null || which clawdbot 2>/dev/null || which moltbot 2>/dev/null', {
       encoding: 'utf-8',
     }).trim();
 
@@ -58,7 +58,7 @@ export async function installClawdbotHook(): Promise<void> {
   const hooksDir = findClawdbotHooksDir();
 
   if (!hooksDir) {
-    console.error('Clawdbot/Moltbot is not installed on this system.');
+    console.error('OpenClaw/Clawdbot is not installed on this system.');
     console.log('Install it first: npm install -g clawdbot');
     process.exit(1);
   }
@@ -92,7 +92,7 @@ export async function uninstallClawdbotHook(): Promise<void> {
   const hooksDir = findClawdbotHooksDir();
 
   if (!hooksDir) {
-    console.log('Clawdbot/Moltbot is not installed on this system.');
+    console.log('OpenClaw/Clawdbot is not installed on this system.');
     return;
   }
 
@@ -111,14 +111,14 @@ export async function clawdbotHookStatus(): Promise<void> {
   const hooksDir = findClawdbotHooksDir();
 
   if (!hooksDir) {
-    console.log('Clawdbot/Moltbot: not installed');
+    console.log('OpenClaw/Clawdbot: not installed');
     return;
   }
 
   const destDir = path.join(hooksDir, HOOK_NAME);
   const installed = fs.existsSync(destDir);
 
-  console.log(`Clawdbot/Moltbot: installed`);
+  console.log(`OpenClaw/Clawdbot: installed`);
   console.log(`Hooks directory:  ${hooksDir}`);
   console.log(`cortex-memory:    ${installed ? 'installed' : 'not installed'}`);
 }

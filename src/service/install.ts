@@ -105,12 +105,13 @@ export async function installService(): Promise<void> {
   console.log(`  Dashboard: http://localhost:3030`);
 }
 
-export async function uninstallService(): Promise<void> {
+export async function uninstallService(options?: { cleanLogs?: boolean }): Promise<void> {
   const platform = detectPlatform();
   const servicePath = getServicePath(platform);
 
   if (!fs.existsSync(servicePath)) {
-    console.log('No service installed.');
+    console.log('  - No service installed.');
+    if (options?.cleanLogs) cleanLogsDirectory();
     return;
   }
 
@@ -131,7 +132,21 @@ export async function uninstallService(): Promise<void> {
   }
 
   fs.unlinkSync(servicePath);
-  console.log(`Service removed: ${servicePath}`);
+  console.log(`  - Service removed: ${servicePath}`);
+
+  if (options?.cleanLogs) {
+    cleanLogsDirectory();
+  }
+}
+
+function cleanLogsDirectory(): void {
+  const logsDir = path.join(os.homedir(), '.claude-cortex', 'logs');
+  if (!fs.existsSync(logsDir)) {
+    console.log('  - Logs directory not found');
+    return;
+  }
+  fs.rmSync(logsDir, { recursive: true, force: true });
+  console.log(`  - Logs cleaned: ${logsDir}`);
 }
 
 export async function serviceStatus(): Promise<void> {
@@ -173,9 +188,11 @@ export async function handleServiceCommand(subcommand: string): Promise<void> {
     case 'install':
       await installService();
       break;
-    case 'uninstall':
-      await uninstallService();
+    case 'uninstall': {
+      const cleanLogs = process.argv.includes('--clean-logs');
+      await uninstallService({ cleanLogs });
       break;
+    }
     case 'status':
       await serviceStatus();
       break;

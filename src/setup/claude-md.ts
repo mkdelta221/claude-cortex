@@ -2,7 +2,7 @@
  * Full setup for Claude Cortex.
  *
  * 1. Injects proactive memory instructions into ~/.claude/CLAUDE.md (Claude Code)
- * 2. Installs cortex-memory hook into Clawdbot/Moltbot if detected
+ * 2. Installs cortex-memory hook into OpenClaw/Clawdbot if detected
  *
  * Both steps are idempotent.
  */
@@ -59,7 +59,7 @@ export async function setupClaudeMd(options?: { stopHook?: boolean }): Promise<v
   // 2. Hooks in settings.json
   setupHooks(options);
 
-  // 3. Clawdbot/Moltbot — if detected
+  // 3. OpenClaw/Clawdbot — if detected
   const hooksDir = findClawdbotHooksDir();
   if (hooksDir) {
     const hookExists = fs.existsSync(path.join(hooksDir, 'cortex-memory'));
@@ -69,7 +69,7 @@ export async function setupClaudeMd(options?: { stopHook?: boolean }): Promise<v
       await installClawdbotHook();
     }
   } else {
-    console.log('- Clawdbot/Moltbot: not detected (skipped)');
+    console.log('- OpenClaw/Clawdbot: not detected (skipped)');
   }
 
   console.log('\nSetup complete.');

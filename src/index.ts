@@ -14,14 +14,17 @@
  *   npx claude-cortex --dashboard             # Start API + Dashboard (admin panel)
  *   npx claude-cortex --db /path/to.db        # Custom database path
  *   npx claude-cortex setup                    # Configure Claude for proactive memory use
+ *   npx claude-cortex setup uninstall          # Remove hooks and CLAUDE.md block
+ *   npx claude-cortex uninstall               # Complete uninstall (keeps database)
+ *   npx claude-cortex uninstall --keep-logs   # Complete uninstall, preserve logs
  *   npx claude-cortex hook pre-compact         # Run pre-compact hook (for settings.json)
  *   npx claude-cortex hook session-start       # Run session-start hook (for settings.json)
  *   npx claude-cortex hook session-end         # Run session-end hook (for settings.json)
  *   npx claude-cortex service install         # Auto-start dashboard on login
  *   npx claude-cortex service uninstall       # Remove auto-start
  *   npx claude-cortex service status          # Check service status
- *   npx claude-cortex clawdbot install        # Install Clawdbot/Moltbot hook
- *   npx claude-cortex clawdbot uninstall      # Remove Clawdbot/Moltbot hook
+ *   npx claude-cortex clawdbot install        # Install OpenClaw/Clawdbot hook
+ *   npx claude-cortex clawdbot uninstall      # Remove OpenClaw/Clawdbot hook
  *   npx claude-cortex clawdbot status         # Check Clawdbot hook status
  */
 
@@ -172,8 +175,21 @@ async function main() {
 
   // Handle "setup" subcommand
   if (process.argv[2] === 'setup') {
+    if (process.argv[3] === 'uninstall') {
+      const { uninstallSetup } = await import('./setup/uninstall.js');
+      await uninstallSetup();
+      return;
+    }
     const stopHook = process.argv.includes('--with-stop-hook');
     await setupClaudeMd({ stopHook });
+    return;
+  }
+
+  // Handle "uninstall" — full uninstall
+  if (process.argv[2] === 'uninstall') {
+    const { uninstallAll } = await import('./setup/uninstall.js');
+    const keepLogs = process.argv.includes('--keep-logs');
+    await uninstallAll({ keepLogs });
     return;
   }
 
