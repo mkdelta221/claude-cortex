@@ -57,6 +57,7 @@ export function useMemoryWebSocket(options: UseMemoryWebSocketOptions = {}) {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY);
+  const connectRef = useRef<() => void>(() => {});
   const [isConnected, setIsConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<{
     type: WebSocketEventType;
@@ -201,7 +202,7 @@ export function useMemoryWebSocket(options: UseMemoryWebSocketOptions = {}) {
           );
 
           reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
+            connectRef.current();
           }, delay);
         } else if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
           console.error('[WebSocket] Max reconnection attempts reached. Use reconnect() to try again.');
@@ -211,6 +212,11 @@ export function useMemoryWebSocket(options: UseMemoryWebSocketOptions = {}) {
       console.error('[WebSocket] Failed to connect:', err);
     }
   }, [enabled, queryClient]); // onMessage accessed via ref to prevent reconnection loops
+
+  // Keep ref in sync for recursive reconnect calls
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   // Connect on mount
   useEffect(() => {
@@ -240,6 +246,5 @@ export function useMemoryWebSocket(options: UseMemoryWebSocketOptions = {}) {
     isConnected,
     lastEvent,
     reconnect: manualReconnect,
-    reconnectAttempts: reconnectAttemptsRef.current,
   };
 }

@@ -47,7 +47,7 @@ export function MemoriesView({ memories, selectedMemory, onSelectMemory }: Memor
   }, []);
 
   const selectAll = () => setChecked(new Set(sorted.map((m) => m.id)));
-  const deselectAll = () => setChecked(new Set());
+  const _deselectAll = () => setChecked(new Set());
 
   const deleteSelected = async () => {
     if (checked.size === 0) return;

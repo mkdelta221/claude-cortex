@@ -115,7 +115,7 @@ export default function DashboardPage() {
     type: typeFilter,
     category: categoryFilter,
   });
-  const { data: stats, isLoading: statsLoading } = useStats(selectedProject);
+  const { data: stats, isLoading: _statsLoading } = useStats(selectedProject);
   const { data: links = [] } = useMemoryLinks(selectedProject);
 
   // Mutations
@@ -124,8 +124,8 @@ export default function DashboardPage() {
 
   // Control status
   const { data: controlStatus } = useControlStatus();
-  const pauseMutation = usePauseMemory();
-  const resumeMutation = useResumeMemory();
+  const _pauseMutation = usePauseMemory();
+  const _resumeMutation = useResumeMemory();
   const isPaused = controlStatus?.paused ?? false;
 
   const handleSelectMemory = (memory: Memory | null) => {
@@ -143,7 +143,7 @@ export default function DashboardPage() {
     accessMutation.mutate(id);
   };
 
-  const handleConsolidate = () => {
+  const _handleConsolidate = () => {
     consolidateMutation.mutate();
   };
 

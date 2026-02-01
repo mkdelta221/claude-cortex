@@ -17,7 +17,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 // Post-processing disabled for cleaner appearance
 // import { EffectComposer, Bloom, Vignette, ChromaticAberration, Noise } from '@react-three/postprocessing';
-import { Memory, MemoryLink, MemoryCategory } from '@/types/memory';
+import { Memory, MemoryLink } from '@/types/memory';
 import { MemoryNode } from './MemoryNode';
 import { MemoryLinks } from './MemoryLinks';
 import { BrainMesh } from './BrainMesh';
@@ -51,7 +51,7 @@ function BrainContent({
   colorMode,
   pulses,
   onPulseComplete,
-  memoryCategoryCounts,
+  memoryCategoryCounts: _memoryCategoryCounts,
 }: BrainContentProps) {
   // Calculate positions for all memories (deduplicate by ID to prevent React key errors)
   const memoryPositions = useMemo(() => {

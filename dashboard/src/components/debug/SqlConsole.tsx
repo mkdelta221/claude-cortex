@@ -61,17 +61,19 @@ export function SqlConsole() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Keyboard shortcut: Ctrl+Enter to execute
+  const executeQueryRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        executeQuery();
+        executeQueryRef.current();
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [query, allowWrite]);
+  }, []);
 
   const executeQuery = async () => {
     if (!query.trim()) return;
@@ -152,6 +154,8 @@ export function SqlConsole() {
       setIsExecuting(false);
     }
   };
+
+  executeQueryRef.current = executeQuery;
 
   const loadTemplate = (templateQuery: string) => {
     setQuery(templateQuery);

@@ -96,7 +96,7 @@ function MemoryNodeInner({
 }: MemoryNodeProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
-  const { camera } = useThree();
+  const { camera: _camera } = useThree();
 
   // Calculate visual properties (memoized)
   const decayFactor = useMemo(() => calculateDecayFactor(memory), [memory]);

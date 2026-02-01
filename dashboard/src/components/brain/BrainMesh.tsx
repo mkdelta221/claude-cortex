@@ -26,9 +26,9 @@ function createBrainGeometry(): THREE.BufferGeometry {
   const colors = new Float32Array(positions.length);
 
   for (let i = 0; i < positions.length; i += 3) {
-    let x = positions[i];
-    let y = positions[i + 1];
-    let z = positions[i + 2];
+    const x = positions[i];
+    const y = positions[i + 1];
+    const z = positions[i + 2];
 
     // Normalize to get direction
     const length = Math.sqrt(x * x + y * y + z * z);
