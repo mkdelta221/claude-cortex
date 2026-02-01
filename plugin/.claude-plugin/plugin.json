@@ -1,6 +1,6 @@
 {
   "name": "claude-cortex",
-  "version": "1.15.2",
+  "version": "1.16.0",
   "description": "Brain-like persistent memory for Claude — remembers decisions, fixes, patterns across sessions",
   "author": {
     "name": "Michael Kyriacou"
