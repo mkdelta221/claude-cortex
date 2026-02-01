@@ -1,4 +1,4 @@
-# Claude Memory - Brain-Like Memory System for Claude Code
+# Claude Cortex - Brain-Like Memory System for Claude Code
 
 ## The Problem
 

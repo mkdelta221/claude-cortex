@@ -25,5 +25,8 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Local Claude settings (personal permissions)
+.claude/settings.local.json
+
 # Test coverage
 coverage/
