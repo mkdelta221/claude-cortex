@@ -1,0 +1,12 @@
+{
+  "name": "claude-cortex",
+  "version": "1.15.2",
+  "description": "Brain-like persistent memory for Claude — remembers decisions, fixes, patterns across sessions",
+  "author": {
+    "name": "Michael Kyriacou"
+  },
+  "homepage": "https://github.com/mkdelta221/claude-cortex",
+  "repository": "https://github.com/mkdelta221/claude-cortex",
+  "license": "MIT",
+  "keywords": ["memory", "persistence", "context", "knowledge-graph", "mcp"]
+}

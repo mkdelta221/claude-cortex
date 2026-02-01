@@ -26,6 +26,7 @@
  *   npx claude-cortex clawdbot install        # Install OpenClaw/Clawdbot hook
  *   npx claude-cortex clawdbot uninstall      # Remove OpenClaw/Clawdbot hook
  *   npx claude-cortex clawdbot status         # Check Clawdbot hook status
+ *   npx claude-cortex plugin                  # Print plugin directory path (for --plugin-dir)
  */
 
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -182,6 +183,15 @@ async function main() {
     }
     const stopHook = process.argv.includes('--with-stop-hook');
     await setupClaudeMd({ stopHook });
+    return;
+  }
+
+  // Handle "plugin" — print plugin directory path
+  if (process.argv[2] === 'plugin') {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const pluginDir = path.resolve(__dirname, '..', 'plugin');
+    console.log(pluginDir);
     return;
   }
 
